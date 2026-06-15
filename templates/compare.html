@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Compare Teams — CFB Allen Ratings{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<h1>Compare Teams</h1>
+<p class="subtitle">Select 2–4 teams to compare win distributions, title odds, and playoff odds</p>
+
+<form class="filters" method="get" id="compareForm">
+  <div class="team-picker" id="teamPicker">
+    {% for i in range(4) %}
+    <select name="teams" class="team-select">
+      <option value="">— Team {{ i + 1 }} —</option>
+      {% for t in team_options %}
+      <option value="{{ t.team_id }}" {% if selected_ids|length > i and selected_ids[i] == t.team_id %}selected{% endif %}>
+        {{ t.team_name }}
+      </option>
+      {% endfor %}
+    </select>
+    {% endfor %}
+    <button type="submit" class="btn">Compare</button>
+  </div>
+</form>
+
+{% if selected|length >= 2 %}
+<div class="compare-grid">
+  {% for t in selected %}
+  {% set theme = team_themes[loop.index0] %}
+  <div class="compare-team-card" style="--team-primary: {{ theme.primary }}; --team-on-primary: {{ theme.on_primary }};">
+    <div class="compare-team-hero">
+      {% if theme.logo_url %}
+      <div class="team-hero-logo-wrap compare-logo-wrap">
+        <img src="{{ theme.logo_url }}" alt="" class="team-hero-logo compare-logo" width="48" height="48">
+      </div>
+      {% endif %}
+      <div class="compare-team-hero-text">
+        <h3><a href="{{ url_for('team_detail', team_id=t.team_id) }}">{{ t.team_name }}</a></h3>
+        {% if t.conference %}
+        <span class="team-hero-badge">{{ t.conference }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="compare-team-body">
+      <table class="data-table compare-stats-table">
+        {% if t.rank %}<tr><td>Rank</td><td class="num">#{{ t.rank }}</td></tr>{% endif %}
+        {% if t.blended_margin is not none %}<tr><td>Blended</td><td class="num">{{ "%+.1f"|format(t.blended_margin) }}</td></tr>{% endif %}
+        {% if t.algorithm_margin is not none %}<tr><td>No Preseason</td><td class="num">{{ "%+.1f"|format(t.algorithm_margin) }}</td></tr>{% endif %}
+        <tr><td>Record</td><td class="num">{{ t.record or '0-0' }}</td></tr>
+        <tr><td>Forecasted wins</td><td class="num">{{ "%.2f"|format(t.forecasted_wins or t.avg_wins or 0) }}</td></tr>
+        <tr><td>Title odds</td><td class="num">{{ t.title_odds_pct }}%</td></tr>
+        <tr><td>Conf title odds</td><td class="num">{{ t.conf_champ_odds_pct }}%</td></tr>
+        <tr><td>Playoff Odds</td><td class="num">{{ t.eligibility_pct }}%</td></tr>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1.1rem;">Overlaid win distributions</h2>
+  <div class="chart-wrap tall">
+    <canvas id="compareChart"></canvas>
+  </div>
+</div>
+{% elif selected_ids %}
+<p class="error">Select at least 2 valid FBS teams to compare.</p>
+{% if invalid_ids %}
+<p class="muted">Could not find: {{ invalid_ids | join(', ') }}</p>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if selected|length >= 2 %}
+<script>
+  new Chart(document.getElementById('compareChart'), {
+    type: 'bar',
+    data: {
+      labels: ['0','1','2','3','4','5','6','7','8','9','10','11','12'],
+      datasets: {{ chart_datasets | tojson }}
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: 'Wins' } },
+        y: { title: { display: true, text: 'Simulations' }, beginAtZero: true }
+      }
+    }
+  });
+</script>
+{% endif %}
+<script>
+  document.getElementById('compareForm').addEventListener('submit', function(e) {
+    var ids = Array.from(document.querySelectorAll('.team-select'))
+      .map(function(s) { return s.value; })
+      .filter(Boolean);
+    if (ids.length < 2) {
+      e.preventDefault();
+      alert('Pick at least 2 teams.');
+      return;
+    }
+    var seen = new Set();
+    for (var i = 0; i < ids.length; i++) {
+      if (seen.has(ids[i])) {
+        e.preventDefault();
+        alert('Each team can only be selected once.');
+        return;
+      }
+      seen.add(ids[i]);
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}How This Works — CFB Allen Ratings{% endblock %}
+{% block content %}
+<h1>How This Works</h1>
+<p class="subtitle">
+  {{ meta.season_year }} in-season · Week {{ meta.current_week }} · {{ meta.sim_count }} simulated seasons ·
+  Last updated {{ meta.exported_at[:10] if meta.exported_at else '—' }}
+</p>
+
+<div class="card prose">
+  <h2>In-season rankings</h2>
+  <p>
+    Weekly power rankings blend <strong>preseason combined FPI</strong> with an <strong>algorithm margin rating</strong>
+    built from completed FBS-vs-FBS games only. After the first FBS game, the blend is 90% preseason / 10% algorithm;
+    preseason weight drops 10 points per additional FBS game until 10+ games, when rankings are 100% algorithm.
+    Blending happens on the <strong>margin scale</strong>, not rank order.
+  </p>
+  <p>
+  <strong>Blended</strong> uses that fade rule. <strong>No Preseason</strong> shows the pure algorithm margin with no preseason component.
+  Rank movement (▲/▼) compares each team’s rank to the prior week in the stacked weekly rankings file.
+  </p>
+</div>
+
+<div class="card prose">
+  <h2>In-season projections</h2>
+  <p>
+    Each run models <strong>{{ meta.sim_count }} possible finishes</strong> to the {{ meta.season_year }} season from the current week forward.
+    Completed games are <strong>pinned</strong> to their actual results in every simulation. Remaining games are simulated
+    using per-team rating draws with uncertainty that shrinks as teams play more FBS games:
+    σ<sub>eff</sub> = 10 / (1 + √(FBS games played)).
+  </p>
+</div>
+
+<div class="card prose">
+  <h2>Key metrics</h2>
+  <dl class="metric-list">
+    <dt>Blended margin</dt>
+    <dd>Preseason FPI and algorithm margin blended by games played (see above). Higher is better.</dd>
+    <dt>No Preseason</dt>
+    <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
+    <dt>Record</dt>
+    <dd>Overall W–L from completed games on the master schedule (all opponents).</dd>
+    <dt>Forecasted wins</dt>
+    <dd>Average regular-season wins across all {{ meta.sim_count }} in-season simulations.</dd>
+    <dt>SOS</dt>
+    <dd>Strength of schedule: average opponent rating across scheduled games with home/away/neutral site adjustments.</dd>
+    <dt>Playoff / Title odds</dt>
+    <dd>Chance of making the 12-team playoff or winning the national title from the current state of the season.</dd>
+  </dl>
+</div>
+
+<div class="card prose">
+  <h2>Playoff selection &amp; bracket</h2>
+  <p>Same 12-team rules as our preseason model: four power autobids, one Group of 5 autobid, remaining at-large spots by eligibility rules, then the official bracket format with byes for seeds 1–4.</p>
+  <p><a href="{{ url_for('bracket') }}">Explore brackets →</a> · <a href="{{ preseason_viewer_url }}" target="_blank" rel="noopener">Season preview (preseason)</a></p>
+</div>
+{% endblock %}

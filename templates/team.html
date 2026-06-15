@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ team.team_name }} — CFB Allen Ratings{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<div class="team-page" style="--team-primary: {{ team_theme.primary }}; --team-alt: {{ team_theme.alternate }}; --team-on-primary: {{ team_theme.on_primary }};">
+  <header class="team-hero">
+    <div class="team-hero-main">
+      {% if team_theme.logo_url %}
+      <div class="team-hero-logo-wrap">
+        <img src="{{ team_theme.logo_url }}" alt="" class="team-hero-logo" width="64" height="64">
+      </div>
+      {% endif %}
+      <div class="team-hero-text">
+        <h1>{{ team.team_name }}</h1>
+        {% if team.conference %}
+        <span class="team-hero-badge">{{ team.conference }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <p class="team-hero-links">
+      <a href="{{ url_for('schedule', team=team.team_id) }}">View schedule</a>
+      · <a href="{{ url_for('compare', teams=team.team_id) }}">Compare</a>
+      {% if bracket_summary and bracket_summary.field_appearances %}
+      · <a href="{{ url_for('bracket', team=team.team_id) }}">Bracket history</a>
+      {% endif %}
+    </p>
+  </header>
+
+{% if team_summary %}
+<div class="card team-summary-card">
+  <p class="team-summary">{{ team_summary }}</p>
+</div>
+{% endif %}
+
+<div class="card-grid">
+  {% if team.rank %}
+  <div class="card">
+    <div class="stat-label">Rank (Week {{ meta.current_week }})</div>
+    <div class="stat-value">#{{ team.rank }}{% if team.rank_delta %} {% if team.rank_delta > 0 %}<span class="rank-up">▲{{ team.rank_delta }}</span>{% elif team.rank_delta < 0 %}<span class="rank-down">▼{{ team.rank_delta|abs }}</span>{% endif %}{% endif %}</div>
+  </div>
+  {% endif %}
+  <div class="card">
+    <div class="stat-label">Blended Margin</div>
+    <div class="stat-value">{% if team.blended_margin is not none %}{{ "%+.1f"|format(team.blended_margin) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">No Preseason</div>
+    <div class="stat-value">{% if team.algorithm_margin is not none %}{{ "%+.1f"|format(team.algorithm_margin) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Record</div>
+    <div class="stat-value">{{ team.record or '0-0' }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Forecasted Wins</div>
+    <div class="stat-value">{{ "%.2f"|format(team.forecasted_wins or team.avg_wins or 0) }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Title Odds</div>
+    <div class="stat-value">{{ team.title_odds_pct }}%</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Conf Title Odds</div>
+    <div class="stat-value">{{ team.conf_champ_odds_pct }}%</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Playoff Odds</div>
+    <div class="stat-value">{{ team.eligibility_pct }}%</div>
+  </div>
+  {% if team.sos is not none %}
+  <div class="card">
+    <div class="stat-label">SOS</div>
+    <div class="stat-value">{{ "%+.1f"|format(team.sos) }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1.1rem;">Schedule</h2>
+  <p class="muted" style="margin-top:0;">Final scores when played; projected win % for remaining games.</p>
+  {% if team_schedule %}
+  <div class="table-scroll">
+  <table class="data-table schedule-table">
+    <thead>
+      <tr>
+        <th data-sort="text">Date</th>
+        <th data-sort="num">Week</th>
+        <th data-sort="text">Opponent</th>
+        <th data-sort="text">Site</th>
+        <th data-sort="text">Result</th>
+        <th data-sort="num">Win %</th>
+        <th data-sort="num">Avg Margin</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in team_schedule %}
+      <tr class="schedule-row" onclick="window.location='{{ game_url(g.game_id) }}'">
+        <td data-value="{{ g.game_date }}">{{ g.game_date }}</td>
+        <td class="num" data-value="{{ g.week }}">{{ g.week }}</td>
+        <td data-value="{{ g.opponent_name }}">
+          <a class="schedule-opponent" href="{{ url_for('team_detail', team_id=g.opponent_id) }}" onclick="event.stopPropagation()">{{ g.opponent_name }}</a>
+          {% if g.is_conference_game %}<span class="badge" style="background:{{ team.conference | conf_color }};font-size:0.65rem;margin-left:0.25rem;">conf</span>{% endif %}
+        </td>
+        <td data-value="{{ g.home_away }}">
+          {% if g.home_away == 'home' %}Home{% elif g.home_away == 'away' %}Away{% else %}Neutral{% endif %}
+        </td>
+        <td data-value="{% if g.completed %}final{% else %}proj{% endif %}">
+          {% if g.completed and g.team_score is not none and g.opponent_score is not none %}
+          <strong>{{ g.team_score }}–{{ g.opponent_score }}</strong>
+          {% else %}—{% endif %}
+        </td>
+        <td class="num" data-value="{{ g.win_pct if not g.completed else '' }}">
+          {% if g.completed %}—{% else %}{{ g.win_pct }}%{% endif %}
+        </td>
+        <td class="num" data-value="{{ g.avg_margin if g.avg_margin is not none else '' }}">
+          {% if g.avg_margin is not none %}{{ "%.1f"|format(g.avg_margin) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No schedule data available.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1.1rem;">Win distribution ({{ meta.sim_count }} sims)</h2>
+  <div class="chart-wrap">
+    <canvas id="winChart"></canvas>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const teamPrimary = {{ team_theme.primary | tojson }};
+  new Chart(document.getElementById('winChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ hist_labels | tojson }},
+      datasets: [{
+        label: 'Sim count',
+        data: {{ hist_data | tojson }},
+        backgroundColor: teamPrimary + '99',
+        borderColor: teamPrimary,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: 'Wins' } },
+        y: { title: { display: true, text: 'Simulations' }, beginAtZero: true }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+</script>
+{% endblock %}

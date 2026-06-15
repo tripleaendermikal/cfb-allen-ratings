@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Rankings — CFB Allen Ratings{% endblock %}
+{% block content %}
+<h1>In-Season Rankings</h1>
+<p class="subtitle">Week {{ week }} · {{ meta.season_year }} season · in-season projections from {{ meta.sim_count }} sims</p>
+
+<form class="filters" method="get">
+  <label>
+    Week
+    <select name="week" onchange="this.form.submit()">
+      {% for w in weeks %}
+      <option value="{{ w }}" {% if w == week %}selected{% endif %}>Week {{ w }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Ranking
+    <select name="mode" onchange="this.form.submit()">
+      <option value="blended" {% if ranking_mode == 'blended' %}selected{% endif %}>Blended</option>
+      <option value="algorithm" {% if ranking_mode == 'algorithm' %}selected{% endif %}>No Preseason</option>
+    </select>
+  </label>
+  <label>
+    Conference
+    <select name="conference" onchange="this.form.submit()">
+      <option value="">All conferences</option>
+      {% for c in conferences %}
+      <option value="{{ c }}" {% if c == conf_filter %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Search
+    <input type="search" id="leaderboard-search" placeholder="Filter teams…">
+  </label>
+  {% if conf_filter or ranking_mode != 'blended' %}
+  <a href="{{ url_for('leaderboard', week=week) }}" class="btn" style="text-decoration:none;display:inline-block;">Reset filters</a>
+  {% endif %}
+</form>
+
+<div class="table-scroll">
+<table class="data-table" id="leaderboard-table">
+  <thead>
+    <tr>
+      <th data-sort="num">#</th>
+      <th data-sort="text">Team</th>
+      <th data-sort="text">Conference</th>
+      <th data-sort="num">Move</th>
+      <th data-sort="num">Blended</th>
+      <th data-sort="num">No Preseason</th>
+      <th data-sort="text">Record</th>
+      <th data-sort="num">Fcst Wins</th>
+      <th data-sort="num">Playoff %</th>
+      <th data-sort="num">Title %</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="num" data-value="{{ row.display_rank }}">{{ row.display_rank }}</td>
+      <td data-value="{{ row.team_name }}">
+        <a href="{{ url_for('team_detail', team_id=row.team_id) }}">{{ row.team_name }}</a>
+      </td>
+      <td data-value="{{ row.conference }}">
+        {% if row.conference %}
+        <span class="badge" style="background:{{ row.conference | conf_color }}">{{ row.conference }}</span>
+        {% endif %}
+      </td>
+      <td class="num" data-value="{{ row.rank_delta or 0 }}">
+        {% set d = row.rank_delta or 0 %}
+        {% if d > 0 %}<span class="rank-up">▲{{ d }}</span>
+        {% elif d < 0 %}<span class="rank-down">▼{{ d|abs }}</span>
+        {% else %}—{% endif %}
+      </td>
+      <td class="num" data-value="{{ row.blended_margin if row.blended_margin is not none else '' }}">
+        {% if row.blended_margin is not none %}{{ "%+.1f"|format(row.blended_margin) }}{% else %}—{% endif %}
+      </td>
+      <td class="num" data-value="{{ row.algorithm_margin if row.algorithm_margin is not none else '' }}">
+        {% if row.algorithm_margin is not none %}{{ "%+.1f"|format(row.algorithm_margin) }}{% else %}—{% endif %}
+      </td>
+      <td class="num" data-value="{{ row.record or '' }}">{{ row.record or '—' }}</td>
+      <td class="num" data-value="{{ row.forecasted_wins if row.forecasted_wins is not none else '' }}">
+        {% if row.forecasted_wins is not none %}{{ "%.2f"|format(row.forecasted_wins) }}{% else %}—{% endif %}
+      </td>
+      <td class="num" data-value="{{ row.eligibility_pct }}">{{ row.eligibility_pct }}%</td>
+      <td class="num" data-value="{{ row.title_odds_pct }}">{{ row.title_odds_pct }}%</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

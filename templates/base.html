@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CFB Allen Ratings{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="navbar">
+    <a class="brand" href="{{ url_for('leaderboard') }}">CFB Allen Ratings</a>
+    <form class="team-search-form" id="global-team-search" autocomplete="off">
+      <div class="team-search-wrap">
+        <input type="search" id="team-search-input" placeholder="Find team…" aria-label="Find team" aria-autocomplete="list" aria-controls="team-search-results">
+        <ul class="team-search-results" id="team-search-results" hidden></ul>
+      </div>
+    </form>
+    <nav class="nav-primary">
+      <a href="{{ url_for('leaderboard') }}" class="{% if active == 'leaderboard' %}active{% endif %}">Rankings</a>
+      <a href="{{ url_for('schedule') }}" class="{% if active == 'schedule' %}active{% endif %}">Schedule</a>
+      <a href="{{ url_for('bracket') }}" class="{% if active == 'bracket' %}active{% endif %}">Bracket</a>
+      <a href="{{ url_for('methodology') }}" class="{% if active == 'methodology' %}active{% endif %}">How it works</a>
+    </nav>
+    <nav class="nav-secondary">
+      <a href="{{ url_for('compare') }}" class="{% if active == 'compare' %}active{% endif %}">Compare</a>
+      <a href="{{ url_for('fields') }}" class="{% if active == 'fields' %}active{% endif %}">Playoff Fields</a>
+      <a href="{{ url_for('conferences') }}" class="{% if active == 'conferences' %}active{% endif %}">Conferences</a>
+    </nav>
+    <div class="meta">{{ meta.season_year }} · Week {{ meta.current_week or '—' }} · {{ meta.sim_count }} sims</div>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <a href="{{ preseason_viewer_url }}" target="_blank" rel="noopener">Season Preview (preseason)</a>
+  </footer>
+  <script>
+    (function() {
+      var teams = [
+        {% for t in team_search %}
+        { id: {{ t.id | tojson }}, name: {{ t.name | tojson }} },
+        {% endfor %}
+      ];
+
+      var form = document.getElementById('global-team-search');
+      var input = document.getElementById('team-search-input');
+      var results = document.getElementById('team-search-results');
+
+      function matchTeams(query) {
+        var q = query.trim().toLowerCase();
+        if (!q) return [];
+        var exact = [];
+        var partial = [];
+        teams.forEach(function(t) {
+          var name = t.name.toLowerCase();
+          if (name === q) exact.push(t);
+          else if (name.indexOf(q) !== -1) partial.push(t);
+        });
+        return exact.concat(partial).slice(0, 8);
+      }
+
+      function goToTeam(id) {
+        window.location.href = '/team/' + id;
+      }
+
+      function renderResults(matches) {
+        results.innerHTML = '';
+        if (!matches.length) {
+          results.hidden = true;
+          return;
+        }
+        matches.forEach(function(t) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = t.name;
+          btn.addEventListener('click', function() { goToTeam(t.id); });
+          li.appendChild(btn);
+          results.appendChild(li);
+        });
+        results.hidden = false;
+      }
+
+      if (form && input && results) {
+        input.addEventListener('input', function() {
+          renderResults(matchTeams(input.value));
+        });
+        input.addEventListener('focus', function() {
+          renderResults(matchTeams(input.value));
+        });
+        document.addEventListener('click', function(e) {
+          if (!form.contains(e.target)) results.hidden = true;
+        });
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          var matches = matchTeams(input.value);
+          if (matches.length) goToTeam(matches[0].id);
+        });
+      }
+    })();
+
+    document.querySelectorAll('table.data-table').forEach(function(table) {
+      var headers = table.querySelectorAll('th[data-sort]');
+      headers.forEach(function(th, colIdx) {
+        th.addEventListener('click', function() {
+          var tbody = table.querySelector('tbody');
+          var rows = Array.from(tbody.querySelectorAll('tr'));
+          var type = th.dataset.sort;
+          var asc = !th.classList.contains('sorted-asc');
+          headers.forEach(function(h) { h.classList.remove('sorted-asc', 'sorted-desc'); });
+          th.classList.add(asc ? 'sorted-asc' : 'sorted-desc');
+          rows.sort(function(a, b) {
+            var av = a.children[colIdx].dataset.value || a.children[colIdx].textContent.trim();
+            var bv = b.children[colIdx].dataset.value || b.children[colIdx].textContent.trim();
+            if (type === 'num') {
+              av = parseFloat(av) || 0;
+              bv = parseFloat(bv) || 0;
+              return asc ? av - bv : bv - av;
+            }
+            return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+          });
+          rows.forEach(function(r) { tbody.appendChild(r); });
+        });
+      });
+    });
+
+    function filterTableRows(inputId, tableSelector) {
+      var input = document.getElementById(inputId);
+      var table = document.querySelector(tableSelector);
+      if (!input || !table) return;
+      input.addEventListener('input', function() {
+        var q = input.value.trim().toLowerCase();
+        table.querySelectorAll('tbody tr').forEach(function(row) {
+          var text = row.textContent.toLowerCase();
+          row.style.display = !q || text.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+    }
+    filterTableRows('leaderboard-search', '#leaderboard-table');
+    filterTableRows('schedule-search', '#schedule-table');
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}{{ conf.conference }} — CFB Allen Ratings{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<div class="conf-page" style="--conf-color: {{ conf.conference | conf_color }};">
+  <p><a href="{{ url_for('conferences') }}">← All conferences</a></p>
+
+  <header class="conf-hero">
+    <h1><span class="badge conf-hero-badge">{{ conf.conference }}</span></h1>
+    <p class="subtitle conf-hero-sub">
+      {% if conf.is_group_of_6 %}Group of 6 · {% endif %}
+      {{ conf.team_count }} teams · {{ conf.sims_with_member_pct }}% of sims include a member
+    </p>
+  </header>
+
+  <div class="card-grid">
+    <div class="card conf-accent-card">
+      <div class="stat-label">Total Title Odds</div>
+      <div class="stat-value">{{ conf.total_title_odds_pct }}%</div>
+    </div>
+    {% if conf.conf_favorite_name %}
+    <div class="card conf-accent-card">
+      <div class="stat-label">Conf Favorite</div>
+      <div class="stat-value" style="font-size:1.1rem;">
+        {{ conf.conf_favorite_name }} ({{ conf.conf_favorite_odds_pct }}%)
+      </div>
+    </div>
+    {% endif %}
+    <div class="card conf-accent-card">
+      <div class="stat-label">Playoff Share</div>
+      <div class="stat-value">{{ deep.playoff_share_pct or 0 }}%</div>
+      <div class="muted" style="font-size:0.8rem;">Member slots in playoff field</div>
+    </div>
+    {% if deep.get('title_top3_share_pct') is not none %}
+    <div class="card conf-accent-card">
+      <div class="stat-label">Title Odds Concentration</div>
+      <div class="stat-value">{{ deep.title_top3_share_pct }}%</div>
+      <div class="muted" style="font-size:0.8rem;">Top 3 teams' share of this conference's title odds</div>
+    </div>
+    {% endif %}
+    {% if deep.get('avg_sos') is not none %}
+    <div class="card conf-accent-card">
+      <div class="stat-label">Avg SOS</div>
+      <div class="stat-value">{{ "%+.1f"|format(deep.avg_sos) }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card field-lookup conf-sim-lookup">
+    <h2 style="margin-top:0;font-size:1.1rem;">Sim lookup</h2>
+    <form class="filters" method="get">
+      <input type="hidden" name="conference" value="{{ conf.conference }}">
+      <label>
+        Simulation #
+        <input type="number" name="sim" min="1" max="{{ meta.sim_count }}" value="{{ sim_index or '' }}" placeholder="1–{{ meta.sim_count }}">
+      </label>
+      <button type="submit" class="btn">Look up</button>
+    </form>
+    {% if sim_error %}
+    <p class="error">{{ sim_error }}</p>
+    {% elif sim_snapshot %}
+    <div class="conf-sim-result">
+      {% if sim_snapshot.champion %}
+      <p><strong>Conf champion:</strong>
+        <a href="{{ url_for('team_detail', team_id=sim_snapshot.champion.team_id) }}">{{ sim_snapshot.champion.team_name }}</a>
+      </p>
+      {% endif %}
+      {% if sim_snapshot.finalists %}
+      <p><strong>CCG finalists:</strong>
+        {% for f in sim_snapshot.finalists %}
+        <a href="{{ url_for('team_detail', team_id=f.team_id) }}">{{ f.team_name }}</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+      {% endif %}
+      {% if sim_snapshot.playoff_teams %}
+      <p style="margin-bottom:0.35rem;"><strong>Playoff teams from {{ conf.conference }}:</strong></p>
+      <ul class="conf-sim-playoff-list">
+        {% for t in sim_snapshot.playoff_teams %}
+        <li>
+          {% if t.seed %}#{{ t.seed }}{% else %}—{% endif %}
+          <a href="{{ url_for('team_detail', team_id=t.team_id) }}">{{ t.team_name }}</a>
+          {% if t.fpi is not none %}<span class="muted">({{ "%.1f"|format(t.fpi) }})</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% elif sim_snapshot.champion or sim_snapshot.finalists %}
+      <p class="muted">No member in the playoff field this sim.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if champion_chart or finalist_chart %}
+  <div class="conf-charts-grid">
+    {% if champion_chart %}
+    <div class="card conf-accent-card">
+      <h2 style="margin-top:0;font-size:1.1rem;">Who wins {{ conf.conference }}?</h2>
+      <div class="chart-wrap">
+        <canvas id="champChart"></canvas>
+      </div>
+    </div>
+    {% endif %}
+    {% if finalist_chart %}
+    <div class="card conf-accent-card">
+      <h2 style="margin-top:0;font-size:1.1rem;">CCG finalists</h2>
+      <div class="chart-wrap">
+        <canvas id="finalistChart"></canvas>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if playoff_hist_labels %}
+  <div class="card conf-accent-card">
+    <h2 style="margin-top:0;font-size:1.1rem;">Playoff teams per sim</h2>
+    <p class="muted" style="margin-top:0;">How many {{ conf.conference }} teams make the 12-team field.</p>
+    <div class="chart-wrap">
+      <canvas id="playoffCountChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if marquee_games %}
+  <div class="card conf-accent-card">
+    <h2 style="margin-top:0;font-size:1.1rem;">Marquee Games</h2>
+    <p class="muted" style="margin-top:0;">Top intra-conference matchups by team prestige and competitiveness. Win % is the home team's chance to win.</p>
+    <div class="table-scroll">
+    <table class="data-table marquee-games-table">
+      <thead>
+        <tr>
+          <th>Week</th>
+          <th>Matchup</th>
+          <th class="num">Home win %</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in marquee_games %}
+        <tr class="schedule-row" onclick="window.location='{{ game_url(g.game_id) }}'">
+          <td>{{ g.label }}</td>
+          <td><a href="{{ game_url(g.game_id) }}" onclick="event.stopPropagation()">{{ g.matchup }}</a></td>
+          <td class="num">{{ g.home_win_pct }}%</td>
+          <td class="muted">{{ g.note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p style="margin:0.75rem 0 0;">
+      <a href="{{ url_for('schedule', conference=conf.conference) }}">View full {{ conf.conference }} schedule →</a>
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="card conf-accent-card">
+    <h2 style="margin-top:0;font-size:1.1rem;">Teams</h2>
+    <div class="table-scroll">
+    <table class="data-table compact-table">
+      <thead>
+        <tr>
+          <th data-sort="text">Team</th>
+          <th data-sort="num">Rating</th>
+          <th data-sort="num">SOS</th>
+          <th data-sort="num">Avg Wins</th>
+          <th data-sort="num" class="sorted-desc" aria-sort="descending">Conf Title %</th>
+          <th data-sort="num">CCG Apps</th>
+          <th data-sort="num">Playoff %</th>
+          <th data-sort="num">Title Odds</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in conf.teams %}
+        <tr>
+          <td data-value="{{ t.team_name }}">
+            <a href="{{ url_for('team_detail', team_id=t.team_id) }}">{{ t.team_name }}</a>
+          </td>
+          <td class="num" data-value="{{ t.baseline_fpi if t.baseline_fpi is not none else '' }}">
+            {% if t.baseline_fpi is not none %}{{ "%.1f"|format(t.baseline_fpi) }}{% else %}—{% endif %}
+          </td>
+          <td class="num" data-value="{{ t.sos if t.sos is not none else '' }}">
+            {% if t.sos is not none %}{{ "%+.1f"|format(t.sos) }}{% else %}—{% endif %}
+          </td>
+          <td class="num" data-value="{{ t.avg_wins }}">{{ "%.2f"|format(t.avg_wins) }}</td>
+          <td class="num" data-value="{{ t.conf_champ_odds_pct }}">{{ t.conf_champ_odds_pct }}%</td>
+          <td class="num" data-value="{{ t.conf_champ_appearances }}">{{ t.conf_champ_appearances }}</td>
+          <td class="num" data-value="{{ t.playoff_field_pct }}">{{ t.playoff_field_pct }}%</td>
+          <td class="num" data-value="{{ t.title_odds_pct }}">{{ t.title_odds_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {% if conference_summary %}
+  <div class="card conf-summary-card">
+    <p class="conf-summary">{{ conference_summary }}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% if champion_chart or finalist_chart or playoff_hist_labels %}
+<script>
+  const confColor = {{ (conf.conference | conf_color) | tojson }};
+  const countChartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, title: { display: true, text: 'Simulations' } } }
+  };
+  const pctChartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, title: { display: true, text: '% of sims' } } }
+  };
+  {% if champion_chart %}
+  new Chart(document.getElementById('champChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ champion_chart | map(attribute='team_name') | list | tojson }},
+      datasets: [{
+        data: {{ champion_chart | map(attribute='pct') | list | tojson }},
+        backgroundColor: confColor + '99',
+        borderColor: confColor,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      ...pctChartOpts,
+      scales: {
+        ...pctChartOpts.scales,
+        x: { ticks: { maxRotation: 45, minRotation: 45 } }
+      }
+    }
+  });
+  {% endif %}
+  {% if finalist_chart %}
+  new Chart(document.getElementById('finalistChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ finalist_chart | map(attribute='team_name') | list | tojson }},
+      datasets: [{
+        data: {{ finalist_chart | map(attribute='pct') | list | tojson }},
+        backgroundColor: confColor + '66',
+        borderColor: confColor,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      ...pctChartOpts,
+      scales: {
+        ...pctChartOpts.scales,
+        x: { ticks: { maxRotation: 45, minRotation: 45 } }
+      }
+    }
+  });
+  {% endif %}
+  {% if playoff_hist_labels %}
+  new Chart(document.getElementById('playoffCountChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ playoff_hist_labels | tojson }},
+      datasets: [{
+        label: 'Sims',
+        data: {{ playoff_hist_data | tojson }},
+        backgroundColor: confColor + '99',
+        borderColor: confColor,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      ...countChartOpts,
+      scales: {
+        x: { title: { display: true, text: 'Teams in playoff field' } },
+        y: countChartOpts.scales.y
+      }
+    }
+  });
+  {% endif %}
+</script>
+{% endif %}
+{% endblock %}
