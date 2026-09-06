@@ -10,8 +10,10 @@
 <div class="card prose">
   <h2>In-season rankings</h2>
   <p>
-    <strong>Overall</strong> is the primary power rating and drives in-season simulations. With no FBS games played it equals the preseason combined rating.
-    As teams play more FBS games, Overall gradually shifts toward the algorithm margin (No Preseason) on the schedule shown in the rankings table.
+    <strong>Overall</strong> is the primary power rating and the <strong>center</strong> of in-season
+    per-simulation FPI draws. With no FBS games played it equals the preseason combined rating.
+    As teams play more FBS games, Overall gradually shifts toward the algorithm margin (No Preseason)
+    on the schedule shown in the rankings table.
     Rank movement (▲/▼) compares each team’s Overall rank to the prior week.
   </p>
   <p>
@@ -24,8 +26,10 @@
   <p>
     Each run models <strong>{{ meta.sim_count }} possible finishes</strong> to the {{ meta.season_year }} season from the current week forward.
     Completed games are <strong>pinned</strong> to their actual results in every simulation. Remaining games are simulated
-    using per-team <strong>Overall</strong> rating draws with uncertainty that shrinks as teams play more FBS games:
-    σ<sub>eff</sub> = 7.3 / (1 + √(FBS games played)).
+    using per-simulation FPI draws centered on <strong>Overall</strong> with uncertainty that shrinks
+    as teams play more FBS games: σ<sub>eff</sub> = 7.3 / (1 + √(FBS games played)).
+    Each simulation’s draw (not the Overall column itself) is used for remaining game margins,
+    playoff seeding, and bracket matchup strength.
   </p>
 </div>
 
@@ -33,7 +37,7 @@
   <h2>Key metrics</h2>
   <dl class="metric-list">
     <dt>Overall margin</dt>
-    <dd>Primary rating blended from preseason and in-season results by games played. Used for in-season sim FPI draws.</dd>
+    <dd>Primary rating blended from preseason and in-season results by games played. Centers each season’s simulated FPI draw; bracket odds use the draw, not this point estimate.</dd>
     <dt>No Preseason</dt>
     <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
     <dt>Record</dt>
@@ -49,7 +53,7 @@
 
 <div class="card prose">
   <h2>Playoff selection &amp; bracket</h2>
-  <p>Same 12-team rules as our preseason model: four power autobids, one Group of 5 autobid, remaining at-large spots by eligibility rules, then the official bracket format with byes for seeds 1–4.</p>
+  <p>Same 12-team rules as our preseason model: four power autobids, one Group of 5 autobid, remaining at-large spots by eligibility rules, then the official bracket format with byes for seeds 1–4. Within each simulation, seeds and matchup win probabilities use that simulation’s FPI draw (centered on Overall), not the Overall column shown in the rankings table.</p>
   <p><a href="{{ url_for('bracket') }}">Explore brackets →</a> · <a href="{{ preseason_viewer_url }}" target="_blank" rel="noopener">Season preview (preseason)</a></p>
 </div>
 {% endblock %}
