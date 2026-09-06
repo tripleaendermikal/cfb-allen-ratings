@@ -43,13 +43,18 @@ The in-season sim pipeline (`run_in_season_sim_pipeline.py`) remains in the pare
 ## Weekly refresh
 
 ```powershell
+# All-in-one: scores → sims → rankings → JSON export
+python C:\Users\ender\update_in_season_weekly.py
+
+# Or step by step:
 # 1. Refresh ESPN scores + in-season sims (parent workspace)
-python C:\Users\ender\run_in_season_sim_pipeline.py
+python C:\Users\ender\refresh_2026_schedule_scores.py
+python C:\Users\ender\run_in_season_sim_pipeline.py --skip-refresh
 
 # 2. Weekly rankings
-python C:\Users\ender\cfb-allen-ratings\compute_in_season_rankings.py
+python C:\Users\ender\compute_in_season_rankings.py
 
-# 3. Export JSON
+# 3. Export JSON (move, fcst wins, playoff%, title%)
 python C:\Users\ender\cfb-allen-ratings\export_in_season_data.py
 
 # 4. Push to GitHub (Render auto-redeploys)
