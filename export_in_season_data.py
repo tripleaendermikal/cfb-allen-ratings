@@ -24,6 +24,8 @@ from cfb_rating.in_season import compute_overall_margin  # noqa: E402
 
 IN_SEASON_PREFIX = "cfb_2026_in_season"
 
+IN_SEASON_FPI_SIGMA = 7.3
+
 SOURCES = {
     "champ_odds": ROOT / f"{IN_SEASON_PREFIX}_FBS_playoff_champ_odds_fpi_seed.csv",
     "conf_champ_odds": ROOT / f"{IN_SEASON_PREFIX}_FBS_conf_champ_odds.csv",
@@ -31,6 +33,7 @@ SOURCES = {
     "records": ROOT / f"{IN_SEASON_PREFIX}_fbs_team_sim_records_v2.csv",
     "games_sim": ROOT / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi_simulated.csv",
     "games_fpi": ROOT / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi.csv",
+    "games_margin": ROOT / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi_margin.csv",
     "games_base": ROOT / "cfb_2026_fbs_games_with_fpi.csv",
     "rankings": ROOT / f"{IN_SEASON_PREFIX}_weekly_rankings.csv",
     "conferences": ROOT / "espn_cfb_teams_conferences.csv",
@@ -340,7 +343,7 @@ def main() -> int:
     )
 
     _, game_rows = esd.read_csv(SOURCES["games_sim"])
-    margin_lists = esd.load_margin_lists(SOURCES["games_fpi"], sim_cols)
+    margin_lists = esd.load_margin_lists(esd.resolve_margin_source(SOURCES), sim_cols)
     margin_map = esd.load_avg_margins(margin_lists)
     full_schedule, schedule = esd.build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
     if SOURCES["games_base"].is_file():
@@ -371,10 +374,10 @@ def main() -> int:
             pass
 
     team_summaries = esd.build_team_summaries(
-        teams, leaderboard, conferences, games, n_sims, season_year
+        teams, leaderboard, conferences, games, n_sims, season_year, mode="in_season"
     )
     conference_summaries = esd.build_conference_summaries(
-        conferences, conference_deep, n_sims, season_year
+        conferences, conference_deep, n_sims, season_year, mode="in_season"
     )
 
     brackets_summary = {
@@ -398,7 +401,7 @@ def main() -> int:
         "sources": {k: str(v) for k, v in SOURCES.items()},
         "team_count": len(teams),
         "game_count": len(schedule),
-        "fpi_sigma": esd.DEFAULT_SIGMA,
+        "fpi_sigma": IN_SEASON_FPI_SIGMA,
         "fpi_ci_method": "analytical_90",
         "app_title": "CFB Allen Ratings",
     }

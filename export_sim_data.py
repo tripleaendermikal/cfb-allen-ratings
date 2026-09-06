@@ -18,7 +18,7 @@ from pathlib import Path
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 GROUP_OF_6 = {"American", "Pac-12", "Sun Belt", "CUSA", "Mountain West", "MAC"}
 FBS_INDEP = "FBS Indep."
-DEFAULT_SIGMA = 10.0
+DEFAULT_SIGMA = 7.3
 FPI_MIN = -40.0
 FPI_MAX = 40.0
 FPI_MAX_GROUP_OF_6 = 27.0
@@ -163,6 +163,12 @@ def tier_article(tier: str) -> str:
     return "an" if tier[:1].lower() in "aeiou" else "a"
 
 
+def model_label(season_year: int, mode: str = "preseason") -> str:
+    if mode == "in_season":
+        return f"{season_year} in-season model"
+    return f"{season_year} preseason model"
+
+
 def build_team_summary_text(
     team_name: str,
     conference: str,
@@ -176,9 +182,13 @@ def build_team_summary_text(
     conf_size: int,
     conf_favorite: str | None,
     swing_games: list[dict],
+    mode: str = "preseason",
 ) -> str:
     tier = classify_team_tier(title_odds, eligibility, avg_wins)
-    opener = f"The {team_name} are {tier_article(tier)} {tier} in the {season_year} preseason model."
+    opener = (
+        f"The {team_name} are {tier_article(tier)} {tier} in the "
+        f"{model_label(season_year, mode)}."
+    )
 
     if conference == FBS_INDEP:
         conf_sentence = f"They compete as an FBS independent."
@@ -218,6 +228,7 @@ def build_team_summaries(
     games: dict[str, dict],
     sim_count: int,
     season_year: int,
+    mode: str = "preseason",
 ) -> dict:
     lb_by_id = {r["team_id"]: r for r in leaderboard if r.get("team_id")}
     summaries: dict[str, dict] = {}
@@ -250,6 +261,7 @@ def build_team_summaries(
             conf_size=conf_size,
             conf_favorite=conf_favorite,
             swing_games=swing_games,
+            mode=mode,
         )
 
         summaries[tid] = {
@@ -349,6 +361,7 @@ def build_conference_summary_text(
     sim_count: int,
     conf_row: dict,
     deep: dict,
+    mode: str = "preseason",
 ) -> str:
     is_g6 = bool(conf_row.get("is_group_of_6"))
     total_title = float(conf_row.get("total_title_odds_pct") or 0)
@@ -365,7 +378,8 @@ def build_conference_summary_text(
 
     if is_g6:
         identity = (
-            f"The {conference} is a Group of 6 league in the {season_year} preseason model, "
+            f"The {conference} is a Group of 6 league in the "
+            f"{model_label(season_year, mode)}, "
             f"with a member in the playoff field in {sims_member_pct:.1f}% of {sim_count} simulations."
         )
         if total_title >= 0.05:
@@ -498,6 +512,7 @@ def build_conference_summaries(
     conference_deep: dict[str, dict],
     sim_count: int,
     season_year: int,
+    mode: str = "preseason",
 ) -> dict:
     summaries: dict[str, dict] = {}
     for conf_row in conferences:
@@ -511,6 +526,7 @@ def build_conference_summaries(
             sim_count=sim_count,
             conf_row=conf_row,
             deep=deep,
+            mode=mode,
         )
         summaries[conf] = {
             "conference": conf,
@@ -997,6 +1013,14 @@ def dedupe_schedule(schedule: list[dict]) -> list[dict]:
         by_game.values(),
         key=lambda g: (g.get("game_date", ""), g.get("week") or 0, g.get("game_id", "")),
     )
+
+
+def resolve_margin_source(sources: dict[str, Path]) -> Path:
+    """Prefer dedicated margin CSV; fall back to games_fpi for legacy preseason exports."""
+    margin_path = sources.get("games_margin")
+    if margin_path is not None and margin_path.is_file():
+        return margin_path
+    return sources["games_fpi"]
 
 
 def load_margin_lists(path: Path, sim_cols: list[str]) -> dict[tuple[str, str], list[float]]:
@@ -1525,7 +1549,7 @@ def main() -> int:
     field_analysis = build_field_analysis(eligibility["fields"], id_to_name, n_sims, conf_by_id)
 
     _, game_rows = read_csv(SOURCES["games_sim"])
-    margin_lists = load_margin_lists(SOURCES["games_fpi"], sim_cols)
+    margin_lists = load_margin_lists(resolve_margin_source(SOURCES), sim_cols)
     margin_map = load_avg_margins(margin_lists)
     full_schedule, schedule = build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
     merge_team_sos(teams, leaderboard, build_team_sos(full_schedule))
