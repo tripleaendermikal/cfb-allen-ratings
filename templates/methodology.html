@@ -10,14 +10,12 @@
 <div class="card prose">
   <h2>In-season rankings</h2>
   <p>
-    Weekly power rankings blend <strong>preseason combined rating</strong> with an <strong>algorithm margin rating</strong>
-    built from completed FBS-vs-FBS games only. After the first FBS game, the blend is 90% preseason / 10% algorithm;
-    preseason weight drops 10 points per additional FBS game until 10+ games, when rankings are 100% algorithm.
-    Blending happens on the <strong>margin scale</strong>, not rank order.
+    <strong>Overall</strong> is the primary power rating and drives in-season simulations. With no FBS games played it equals the preseason combined rating.
+    As teams play more FBS games, Overall gradually shifts toward the algorithm margin (No Preseason) on the schedule shown in the rankings table.
+    Rank movement (▲/▼) compares each team’s Overall rank to the prior week.
   </p>
   <p>
-  <strong>Blended</strong> uses that fade rule. <strong>No Preseason</strong> shows the pure algorithm margin with no preseason component.
-  Rank movement (▲/▼) compares each team’s rank to the prior week in the stacked weekly rankings file.
+  <strong>No Preseason</strong> shows the pure algorithm margin (capped at ±40) from completed FBS-vs-FBS results, with no preseason component.
   </p>
 </div>
 
@@ -26,7 +24,7 @@
   <p>
     Each run models <strong>{{ meta.sim_count }} possible finishes</strong> to the {{ meta.season_year }} season from the current week forward.
     Completed games are <strong>pinned</strong> to their actual results in every simulation. Remaining games are simulated
-    using per-team rating draws with uncertainty that shrinks as teams play more FBS games:
+    using per-team <strong>Overall</strong> rating draws with uncertainty that shrinks as teams play more FBS games:
     σ<sub>eff</sub> = 10 / (1 + √(FBS games played)).
   </p>
 </div>
@@ -34,8 +32,8 @@
 <div class="card prose">
   <h2>Key metrics</h2>
   <dl class="metric-list">
-    <dt>Blended margin</dt>
-    <dd>Preseason rating and algorithm margin blended by games played (see above). Higher is better.</dd>
+    <dt>Overall margin</dt>
+    <dd>Primary rating blended from preseason and in-season results by games played. Used for in-season sim FPI draws.</dd>
     <dt>No Preseason</dt>
     <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
     <dt>Record</dt>

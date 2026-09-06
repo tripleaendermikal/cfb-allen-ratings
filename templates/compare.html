@@ -45,7 +45,7 @@
     <div class="compare-team-body">
       <table class="data-table compare-stats-table">
         {% if t.rank %}<tr><td>Rank</td><td class="num">#{{ t.rank }}</td></tr>{% endif %}
-        {% if t.blended_margin is not none %}<tr><td>Blended</td><td class="num">{{ "%+.1f"|format(t.blended_margin) }}</td></tr>{% endif %}
+        {% if t.overall_margin is not none %}<tr><td>Overall</td><td class="num">{{ "%+.1f"|format(t.overall_margin) }}</td></tr>{% endif %}
         {% if t.algorithm_margin is not none %}<tr><td>No Preseason</td><td class="num">{{ "%+.1f"|format(t.algorithm_margin) }}</td></tr>{% endif %}
         <tr><td>Record</td><td class="num">{{ t.record or '0-0' }}</td></tr>
         <tr><td>Forecasted wins</td><td class="num">{{ "%.2f"|format(t.forecasted_wins or t.avg_wins or 0) }}</td></tr>

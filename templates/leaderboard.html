@@ -16,7 +16,7 @@
   <label>
     Ranking
     <select name="mode" onchange="this.form.submit()">
-      <option value="blended" {% if ranking_mode == 'blended' %}selected{% endif %}>Blended</option>
+      <option value="overall" {% if ranking_mode == 'overall' %}selected{% endif %}>Overall</option>
       <option value="algorithm" {% if ranking_mode == 'algorithm' %}selected{% endif %}>No Preseason</option>
     </select>
   </label>
@@ -33,7 +33,7 @@
     Search
     <input type="search" id="leaderboard-search" placeholder="Filter teams…">
   </label>
-  {% if conf_filter or ranking_mode != 'blended' %}
+  {% if conf_filter or ranking_mode != 'overall' %}
   <a href="{{ url_for('leaderboard', week=week) }}" class="btn" style="text-decoration:none;display:inline-block;">Reset filters</a>
   {% endif %}
 </form>
@@ -46,7 +46,7 @@
       <th data-sort="text">Team</th>
       <th data-sort="text">Conference</th>
       <th data-sort="num">Move</th>
-      <th data-sort="num">Blended</th>
+      <th data-sort="num">Overall</th>
       <th data-sort="num">No Preseason</th>
       <th data-sort="text">Record</th>
       <th data-sort="num">Fcst Wins</th>
@@ -72,8 +72,8 @@
         {% elif d < 0 %}<span class="rank-down">▼{{ d|abs }}</span>
         {% else %}—{% endif %}
       </td>
-      <td class="num" data-value="{{ row.blended_margin if row.blended_margin is not none else '' }}">
-        {% if row.blended_margin is not none %}{{ "%+.1f"|format(row.blended_margin) }}{% else %}—{% endif %}
+      <td class="num" data-value="{{ row.overall_margin if row.overall_margin is not none else '' }}">
+        {% if row.overall_margin is not none %}{{ "%+.1f"|format(row.overall_margin) }}{% else %}—{% endif %}
       </td>
       <td class="num" data-value="{{ row.algorithm_margin if row.algorithm_margin is not none else '' }}">
         {% if row.algorithm_margin is not none %}{{ "%+.1f"|format(row.algorithm_margin) }}{% else %}—{% endif %}

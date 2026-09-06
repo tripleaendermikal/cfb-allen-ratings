@@ -24,7 +24,21 @@ def _data_root() -> Path:
 DEFAULT_PRESEASON_CSV = _data_root() / "Preseason_2026.csv"
 DEFAULT_PRESEASON_BLENDED_CSV = _data_root() / "Preseason_2026_blended.csv"
 DEFAULT_FADE_GAMES = 10
+DEFAULT_OVERALL_FULL_GAMES = 10
+DEFAULT_OVERALL_OPP_CUTOFF = 4
 DEFAULT_MAX_WEEK = 14
+DEFAULT_ALGORITHM_MARGIN_MIN = -40.0
+DEFAULT_ALGORITHM_MARGIN_MAX = 40.0
+
+
+def clamp_algorithm_margin(
+    margin: float,
+    *,
+    min_margin: float = DEFAULT_ALGORITHM_MARGIN_MIN,
+    max_margin: float = DEFAULT_ALGORITHM_MARGIN_MAX,
+) -> float:
+    """Clamp No Preseason (algorithm) margin for display and blending."""
+    return max(min_margin, min(max_margin, margin))
 
 
 def norm_name(value: str) -> str:
@@ -181,6 +195,86 @@ def blend_in_season_margins(
     return blended
 
 
+def avg_opponent_blended_played(
+    team_id: str,
+    week_games: Sequence[GameRecord],
+    blended_margins: Mapping[str, float],
+) -> float:
+    """Mean blended margin of FBS opponents faced in completed games through the week."""
+    opp_ids: list[str] = []
+    for game in week_games:
+        if game.home_team_id == team_id:
+            opp_ids.append(game.away_team_id)
+        elif game.away_team_id == team_id:
+            opp_ids.append(game.home_team_id)
+    if not opp_ids:
+        return 0.0
+    return sum(blended_margins[oid] for oid in opp_ids) / len(opp_ids)
+
+
+def overall_component_weights(
+    games_played: int,
+    *,
+    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
+    opp_cutoff: int = DEFAULT_OVERALL_OPP_CUTOFF,
+) -> tuple[float, float, float]:
+    """Return (preseason_w, opp_adj_w, algorithm_w) for Overall margin."""
+    games = max(games_played, 0)
+    if games <= 0:
+        return (1.0, 0.0, 0.0)
+    if games >= full_games:
+        return (0.0, 0.0, 1.0)
+    if games <= opp_cutoff:
+        pct = games * 0.05
+        return (1.0 - 2.0 * pct, pct, pct)
+    algo_weight = games * 0.10
+    return (1.0 - algo_weight, 0.0, algo_weight)
+
+
+def compute_overall_margin(
+    preseason_margin: Optional[float],
+    opp_adj_margin: float,
+    algorithm_margin: float,
+    games_played: int,
+    *,
+    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
+) -> float:
+    """Blend preseason, Opp Adj, and No Preseason into the Overall margin."""
+    w_pre, w_opp, w_algo = overall_component_weights(
+        games_played, full_games=full_games
+    )
+    if w_pre == 1.0:
+        if preseason_margin is not None:
+            return preseason_margin
+        return algorithm_margin
+    if w_algo == 1.0 and w_opp == 0.0:
+        return algorithm_margin
+    pre = preseason_margin if preseason_margin is not None else algorithm_margin
+    return w_pre * pre + w_opp * opp_adj_margin + w_algo * algorithm_margin
+
+
+def compute_overall_margins(
+    preseason_margins: Mapping[str, float],
+    opp_adj_margins: Mapping[str, float],
+    algorithm_margins: Mapping[str, float],
+    games_played: Mapping[str, int],
+    team_ids: Sequence[str],
+    *,
+    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
+) -> Dict[str, float]:
+    """Compute Overall margin per team."""
+    return {
+        team_id: compute_overall_margin(
+            preseason_margins.get(team_id),
+            opp_adj_margins[team_id],
+            algorithm_margins[team_id],
+            games_played.get(team_id, 0),
+            full_games=full_games,
+        )
+        for team_id in team_ids
+    }
+
+
 @dataclass(frozen=True)
 class InSeasonRankingRow:
     week: int
@@ -191,7 +285,10 @@ class InSeasonRankingRow:
     fbs_games_played: int
     preseason_margin: Optional[float]
     algorithm_margin: float
+    raw_algorithm_margin: float
+    opp_adj_margin: float
     blended_margin: float
+    overall_margin: float
     algorithm_rating: float
     preseason_weight: float
 
@@ -217,8 +314,12 @@ def compute_in_season_rankings_for_week(
         iterations=iterations,
     )
     margin_results = compute_margin_ratings(ratings)
-    algorithm_margins = {
+    raw_algorithm_margins = {
         team_id: result.margin_rating for team_id, result in margin_results.items()
+    }
+    algorithm_margins = {
+        team_id: clamp_algorithm_margin(margin)
+        for team_id, margin in raw_algorithm_margins.items()
     }
     blended_margins = blend_in_season_margins(
         preseason_margins,
@@ -226,12 +327,24 @@ def compute_in_season_rankings_for_week(
         games_played,
         fade_games=fade_games,
     )
+    opp_adj_margins = {
+        team_id: raw_algorithm_margins[team_id]
+        + avg_opponent_blended_played(team_id, week_games, blended_margins)
+        for team_id in team_ids
+    }
+    overall_margins = compute_overall_margins(
+        preseason_margins,
+        opp_adj_margins,
+        algorithm_margins,
+        games_played,
+        team_ids,
+    )
 
     info = team_info or {}
     ordered = sorted(
         team_ids,
         key=lambda team_id: (
-            -blended_margins[team_id],
+            -overall_margins[team_id],
             info.get(team_id, {}).get("team_name", team_id),
         ),
     )
@@ -253,12 +366,40 @@ def compute_in_season_rankings_for_week(
                 fbs_games_played=games_played.get(team_id, 0),
                 preseason_margin=preseason_margins.get(team_id),
                 algorithm_margin=algorithm_margins[team_id],
+                raw_algorithm_margin=raw_algorithm_margins[team_id],
+                opp_adj_margin=opp_adj_margins[team_id],
                 blended_margin=blended_margins[team_id],
+                overall_margin=overall_margins[team_id],
                 algorithm_rating=ratings[team_id],
                 preseason_weight=preseason_weight,
             )
         )
     return rows
+
+
+def compute_overall_margins_snapshot(
+    games: Sequence[GameRecord],
+    through_week: int,
+    team_ids: Sequence[str],
+    preseason_margins: Mapping[str, float],
+    *,
+    team_info: Optional[Mapping[str, dict]] = None,
+    iterations: int = 1000,
+    max_week: int = DEFAULT_MAX_WEEK,
+    fade_games: int = DEFAULT_FADE_GAMES,
+) -> Dict[str, float]:
+    """Overall margins as of ``through_week`` (for in-season sim FPI base)."""
+    rows = compute_in_season_rankings_for_week(
+        games,
+        through_week,
+        team_ids,
+        preseason_margins,
+        team_info=team_info,
+        iterations=iterations,
+        max_week=max_week,
+        fade_games=fade_games,
+    )
+    return {row.team_id: row.overall_margin for row in rows}
 
 
 def compute_weekly_in_season_rankings(
@@ -303,7 +444,10 @@ def write_in_season_rankings_csv(
         "fbs_games_played",
         "preseason_margin",
         "algorithm_margin",
+        "raw_algorithm_margin",
+        "opp_adj_margin",
         "blended_margin",
+        "overall_margin",
         "algorithm_rating",
         "preseason_weight",
     ]
@@ -325,7 +469,10 @@ def write_in_season_rankings_csv(
                         else ""
                     ),
                     "algorithm_margin": f"{row.algorithm_margin:.10f}",
+                    "raw_algorithm_margin": f"{row.raw_algorithm_margin:.10f}",
+                    "opp_adj_margin": f"{row.opp_adj_margin:.10f}",
                     "blended_margin": f"{row.blended_margin:.10f}",
+                    "overall_margin": f"{row.overall_margin:.10f}",
                     "algorithm_rating": f"{row.algorithm_rating:.10f}",
                     "preseason_weight": f"{row.preseason_weight:.10f}",
                 }

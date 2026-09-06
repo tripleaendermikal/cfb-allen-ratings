@@ -20,6 +20,7 @@ if str(APP_DIR) not in sys.path:
 
 import export_sim_data as esd  # noqa: E402
 from cfb_in_season_sim import is_completed, parse_score  # noqa: E402
+from cfb_rating.in_season import compute_overall_margin  # noqa: E402
 
 IN_SEASON_PREFIX = "cfb_2026_in_season"
 
@@ -78,6 +79,36 @@ def build_team_records(game_rows: list[dict[str, str]]) -> dict[str, dict[str, i
     return dict(records)
 
 
+def infer_current_week_from_games(game_rows: list[dict[str, str]]) -> int:
+    """Latest regular-season week with at least one completed game."""
+    weeks: list[int] = []
+    for row in game_rows:
+        if not is_completed(row):
+            continue
+        week_raw = (row.get("week") or "").strip()
+        if week_raw.isdigit():
+            weeks.append(int(week_raw))
+    return max(weeks) if weeks else 0
+
+
+def _resolve_overall_margin(entry: dict) -> float | None:
+    """Use stored overall or compute from components (stale CSV/JSON)."""
+    existing = entry.get("overall_margin")
+    if existing is not None:
+        return existing
+    preseason = entry.get("preseason_margin")
+    opp_adj = entry.get("opp_adj_margin")
+    algorithm = entry.get("algorithm_margin")
+    if preseason is None and opp_adj is None and algorithm is None:
+        return None
+    return compute_overall_margin(
+        preseason,
+        opp_adj or 0.0,
+        algorithm or 0.0,
+        int(entry.get("fbs_games_played") or 0),
+    )
+
+
 def load_weekly_rankings(path: Path) -> dict:
     if not path.is_file():
         return {"current_week": 0, "weeks": [], "by_week": {}}
@@ -86,14 +117,22 @@ def load_weekly_rankings(path: Path) -> dict:
     with path.open(encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             week = int(row["week"])
-            by_week[week].append(
-                {
+            entry = {
                     "team_id": row["team_id"],
                     "team_name": row.get("team_name", ""),
                     "conference": row.get("conference", ""),
                     "rank": int(row["rank"]),
                     "blended_margin": float(row["blended_margin"]),
                     "algorithm_margin": float(row["algorithm_margin"]),
+                    "raw_algorithm_margin": float(row["raw_algorithm_margin"])
+                    if (row.get("raw_algorithm_margin") or "").strip()
+                    else None,
+                    "opp_adj_margin": float(row["opp_adj_margin"])
+                    if (row.get("opp_adj_margin") or "").strip()
+                    else None,
+                    "overall_margin": float(row["overall_margin"])
+                    if (row.get("overall_margin") or "").strip()
+                    else None,
                     "preseason_margin": float(row["preseason_margin"])
                     if (row.get("preseason_margin") or "").strip()
                     else None,
@@ -101,31 +140,48 @@ def load_weekly_rankings(path: Path) -> dict:
                     "fbs_games_played": int(row.get("fbs_games_played") or 0),
                     "algorithm_rating": float(row.get("algorithm_rating") or 0),
                 }
-            )
+            entry["overall_margin"] = _resolve_overall_margin(entry)
+            by_week[week].append(entry)
 
     weeks = sorted(by_week.keys())
     current_week = max(weeks) if weeks else 0
 
-    # rank movement: prior_week_rank - current_rank (positive = moved up)
-    rank_history: dict[str, dict[int, int]] = defaultdict(dict)
-    for week in weeks:
-        for entry in by_week[week]:
-            rank_history[entry["team_id"]][week] = entry["rank"]
-
-    for week in weeks:
-        prior_week = week - 1
-        for entry in by_week[week]:
-            prior_rank = rank_history[entry["team_id"]].get(prior_week)
-            if prior_rank is not None:
-                entry["rank_delta"] = prior_rank - entry["rank"]
-            else:
-                entry["rank_delta"] = 0
+    _apply_rank_deltas(by_week, weeks)
 
     return {
         "current_week": current_week,
         "weeks": weeks,
         "by_week": {str(w): by_week[w] for w in weeks},
     }
+
+
+def _preseason_ranks(week_one_entries: list[dict]) -> dict[str, int]:
+    ordered = sorted(
+        week_one_entries,
+        key=lambda entry: (
+            -(entry.get("preseason_margin") if entry.get("preseason_margin") is not None else -999),
+            entry.get("team_name", "").lower(),
+        ),
+    )
+    return {entry["team_id"]: idx + 1 for idx, entry in enumerate(ordered)}
+
+
+def _apply_rank_deltas(by_week: dict[int, list[dict]], weeks: list[int]) -> None:
+    """Rank movement: prior rank minus current rank (positive = moved up)."""
+    rank_history: dict[str, dict[int, int]] = defaultdict(dict)
+    for week in weeks:
+        for entry in by_week[week]:
+            rank_history[entry["team_id"]][week] = entry["rank"]
+
+    preseason_ranks = _preseason_ranks(by_week[1]) if 1 in by_week else {}
+
+    for week in weeks:
+        for entry in by_week[week]:
+            if week == 1:
+                prior_rank = preseason_ranks.get(entry["team_id"])
+            else:
+                prior_rank = rank_history[entry["team_id"]].get(week - 1)
+            entry["rank_delta"] = (prior_rank - entry["rank"]) if prior_rank is not None else 0
 
 
 def merge_rankings_and_records(
@@ -144,6 +200,10 @@ def merge_rankings_and_records(
         row["rank"] = rank_row.get("rank")
         row["blended_margin"] = rank_row.get("blended_margin")
         row["algorithm_margin"] = rank_row.get("algorithm_margin")
+        row["opp_adj_margin"] = rank_row.get("opp_adj_margin")
+        row["overall_margin"] = _resolve_overall_margin(rank_row) if rank_row else None
+        if row["overall_margin"] is None:
+            row["overall_margin"] = _resolve_overall_margin(row)
         row["rank_delta"] = rank_row.get("rank_delta", 0)
         row["fbs_games_played"] = rank_row.get("fbs_games_played", 0)
         rec = records.get(tid, {"wins": 0, "losses": 0})
@@ -255,11 +315,14 @@ def main() -> int:
 
     rankings = load_weekly_rankings(SOURCES["rankings"])
     records: dict[str, dict[str, int]] = {}
+    current_week = rankings.get("current_week") or 0
     if SOURCES["games_base"].is_file():
         _, base_game_rows = esd.read_csv(SOURCES["games_base"])
         records = build_team_records(base_game_rows)
-
-    current_week = rankings.get("current_week") or 0
+        inferred_week = infer_current_week_from_games(base_game_rows)
+        if inferred_week:
+            current_week = inferred_week
+            rankings["current_week"] = current_week
     if current_week:
         merge_rankings_and_records(leaderboard, rankings, records, current_week)
 

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from flask import Flask, abort, render_template, request, url_for
 
+from cfb_rating.in_season import compute_overall_margin
+
 APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = APP_DIR / "data"
 PRESEASON_VIEWER_URL = "https://cfb-viewer.onrender.com"
@@ -54,6 +56,32 @@ def contrasting_text(hex_color: str) -> str:
 MARGIN_HIST_MIN = -50
 MARGIN_HIST_MAX = 50
 MARGIN_HIST_STEP = 5
+
+
+def resolve_overall_margin(rank_row: dict, lb_row: dict) -> float | None:
+    """Return overall margin, computing from components when export data is stale."""
+    for source in (rank_row, lb_row):
+        existing = source.get("overall_margin")
+        if existing is not None:
+            return float(existing)
+    preseason = rank_row.get("preseason_margin") or lb_row.get("preseason_margin")
+    opp_adj = rank_row.get("opp_adj_margin")
+    if opp_adj is None:
+        opp_adj = lb_row.get("opp_adj_margin")
+    algorithm = rank_row.get("algorithm_margin")
+    if algorithm is None:
+        algorithm = lb_row.get("algorithm_margin")
+    games = rank_row.get("fbs_games_played")
+    if games is None:
+        games = lb_row.get("fbs_games_played", 0)
+    if preseason is None and opp_adj is None and algorithm is None:
+        return None
+    return compute_overall_margin(
+        preseason,
+        opp_adj or 0.0,
+        algorithm or 0.0,
+        int(games or 0),
+    )
 
 
 def margin_chart_data(game: dict) -> tuple[list[str], list[int]]:
@@ -279,7 +307,7 @@ class DataStore:
         }
 
     def leaderboard_for_week(
-        self, week: int, ranking_mode: str = "blended"
+        self, week: int, ranking_mode: str = "overall"
     ) -> list[dict]:
         rank_map = self.rankings_for_week(week)
         rows: list[dict] = []
@@ -289,11 +317,22 @@ class DataStore:
                 continue
             row = dict(lb_row)
             rank_row = rank_map.get(tid, {})
+
+            def _margin(key: str):
+                val = rank_row.get(key)
+                if val is not None:
+                    return val
+                return lb_row.get(key)
+
             row["rank"] = rank_row.get("rank")
-            row["blended_margin"] = rank_row.get("blended_margin")
-            row["algorithm_margin"] = rank_row.get("algorithm_margin")
-            row["rank_delta"] = rank_row.get("rank_delta", 0)
-            row["fbs_games_played"] = rank_row.get("fbs_games_played", 0)
+            row["blended_margin"] = _margin("blended_margin")
+            row["algorithm_margin"] = _margin("algorithm_margin")
+            row["opp_adj_margin"] = _margin("opp_adj_margin")
+            row["overall_margin"] = resolve_overall_margin(rank_row, lb_row)
+            row["rank_delta"] = rank_row.get("rank_delta", lb_row.get("rank_delta", 0))
+            row["fbs_games_played"] = rank_row.get(
+                "fbs_games_played", lb_row.get("fbs_games_played", 0)
+            )
             rec = self.records.get(tid, {})
             if rec:
                 row["wins"] = rec.get("wins", 0)
@@ -317,11 +356,19 @@ class DataStore:
                     r.get("team_name", "").lower(),
                 )
             )
-        else:
+        elif ranking_mode == "blended":
             rows.sort(
                 key=lambda r: (
                     r.get("blended_margin") is None,
                     -(r.get("blended_margin") or -999),
+                    r.get("team_name", "").lower(),
+                )
+            )
+        else:
+            rows.sort(
+                key=lambda r: (
+                    r.get("overall_margin") is None,
+                    -(r.get("overall_margin") or -999),
                     r.get("team_name", "").lower(),
                 )
             )
@@ -816,9 +863,11 @@ def create_app() -> Flask:
     def leaderboard():
         conf_filter = request.args.get("conference", "").strip()
         week_raw = request.args.get("week", "").strip()
-        ranking_mode = request.args.get("mode", "blended").strip().lower()
-        if ranking_mode not in ("blended", "algorithm"):
-            ranking_mode = "blended"
+        ranking_mode = request.args.get("mode", "overall").strip().lower()
+        if ranking_mode not in ("overall", "algorithm"):
+            ranking_mode = "overall"
+        if ranking_mode == "blended":
+            ranking_mode = "overall"
 
         default_week = store.meta.get("current_week") or (
             store.ranking_weeks[-1] if store.ranking_weeks else 0
@@ -866,6 +915,8 @@ def create_app() -> Flask:
             "rank": lb.get("rank"),
             "display_rank": lb.get("rank"),
             "blended_margin": lb.get("blended_margin"),
+            "opp_adj_margin": lb.get("opp_adj_margin"),
+            "overall_margin": resolve_overall_margin(lb, lb),
             "algorithm_margin": lb.get("algorithm_margin"),
             "rank_delta": lb.get("rank_delta", 0),
             "record": lb.get("record", "0-0"),
@@ -929,6 +980,8 @@ def create_app() -> Flask:
                     "eligibility_pct": lb.get("eligibility_pct", 0),
                     "rank": lb.get("rank"),
                     "blended_margin": lb.get("blended_margin"),
+                    "opp_adj_margin": lb.get("opp_adj_margin"),
+                    "overall_margin": resolve_overall_margin(lb, lb),
                     "algorithm_margin": lb.get("algorithm_margin"),
                     "record": lb.get("record", "0-0"),
                 }

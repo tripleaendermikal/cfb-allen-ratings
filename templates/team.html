@@ -43,8 +43,8 @@
   </div>
   {% endif %}
   <div class="card">
-    <div class="stat-label">Blended Margin</div>
-    <div class="stat-value">{% if team.blended_margin is not none %}{{ "%+.1f"|format(team.blended_margin) }}{% else %}—{% endif %}</div>
+    <div class="stat-label">Overall</div>
+    <div class="stat-value">{% if team.overall_margin is not none %}{{ "%+.1f"|format(team.overall_margin) }}{% else %}—{% endif %}</div>
   </div>
   <div class="card">
     <div class="stat-label">No Preseason</div>
