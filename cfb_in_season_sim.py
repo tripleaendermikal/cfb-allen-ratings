@@ -77,7 +77,9 @@ def per_team_sigma(base_sigma: float, games_played: int) -> float:
     if base_sigma <= 0:
         raise ValueError("base_sigma must be positive")
     games = max(games_played, 0)
-    return base_sigma / (1.0 + math.sqrt(games))
+    if games == 0:
+        return base_sigma
+    return base_sigma / math.sqrt(games)
 
 
 def count_completed_fbs_game_pairs(rows: Sequence[Mapping[str, str]]) -> int:

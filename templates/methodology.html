@@ -27,7 +27,8 @@
     Each run models <strong>{{ meta.sim_count }} possible finishes</strong> to the {{ meta.season_year }} season from the current week forward.
     Completed games are <strong>pinned</strong> to their actual results in every simulation. Remaining games are simulated
     using per-simulation FPI draws centered on <strong>Overall</strong> with uncertainty that shrinks
-    as teams play more FBS games: σ<sub>eff</sub> = 7.3 / (1 + √(FBS games played)).
+    as teams play more FBS games: σ<sub>eff</sub> = 7.3 when no FBS games have been played;
+    otherwise 7.3 / √(FBS games played).
     Each simulation’s draw (not the Overall column itself) is used for remaining game margins,
     playoff seeding, and bracket matchup strength.
   </p>
