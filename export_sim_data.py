@@ -977,6 +977,10 @@ def build_schedule(
         wins = sum(1 for c in sim_cols if row.get(c) == "1")
         win_pct = round(wins / n * 100, 2) if n else 0
         margin = margin_by_game_team.get((gid, tid))
+        if margin is not None:
+            margin += home_field_adjustment(
+                row.get("neutral_site", ""), row.get("home_away", "")
+            )
         full_schedule.append(
             {
                 "game_id": gid,
@@ -1343,7 +1347,10 @@ def build_games(
             and home_conf != FBS_INDEP
         )
         neutral = row.get("neutral_site")
+        is_neutral = neutral in ("True", True, "true")
         home_margins = margin_lists.get((gid, home_id), [])
+        hfa = home_field_adjustment("true" if is_neutral else "", "home")
+        adjusted_home_margins = [m + hfa for m in home_margins]
         by_id[gid] = {
             "game_id": gid,
             "game_date": row.get("game_date", ""),
@@ -1360,7 +1367,7 @@ def build_games(
             "home_win_pct": row.get("win_pct"),
             "avg_margin": row.get("avg_margin"),
             "is_conference_game": is_conf,
-            "margin_histogram": build_margin_histogram(home_margins),
+            "margin_histogram": build_margin_histogram(adjusted_home_margins),
         }
     return by_id
 
