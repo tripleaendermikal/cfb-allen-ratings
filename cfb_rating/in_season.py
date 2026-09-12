@@ -24,7 +24,7 @@ def _data_root() -> Path:
 DEFAULT_PRESEASON_CSV = _data_root() / "Preseason_2026.csv"
 DEFAULT_PRESEASON_BLENDED_CSV = _data_root() / "Preseason_2026_blended.csv"
 DEFAULT_FADE_GAMES = 10
-DEFAULT_OVERALL_FULL_GAMES = 10
+DEFAULT_OVERALL_FULL_GAMES = 8
 DEFAULT_OVERALL_OPP_CUTOFF = 4
 DEFAULT_MAX_WEEK = 14
 DEFAULT_ALGORITHM_MARGIN_MIN = -40.0
@@ -225,9 +225,9 @@ def overall_component_weights(
     if games >= full_games:
         return (0.0, 0.0, 1.0)
     if games <= opp_cutoff:
-        pct = games * 0.05
+        pct = games / (2.0 * full_games)
         return (1.0 - 2.0 * pct, pct, pct)
-    algo_weight = games * 0.10
+    algo_weight = games / full_games
     return (1.0 - algo_weight, 0.0, algo_weight)
 
 
