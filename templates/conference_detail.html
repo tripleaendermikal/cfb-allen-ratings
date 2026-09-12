@@ -41,6 +41,15 @@
       <div class="muted" style="font-size:0.8rem;">Top 3 teams' share of this conference's title odds</div>
     </div>
     {% endif %}
+    {% if conf.avg_overall is not none %}
+    <div class="card conf-accent-card">
+      <div class="stat-label">Avg Overall</div>
+      <div class="stat-value">{{ "%+.1f"|format(conf.avg_overall) }}</div>
+      {% if avg_overall_rank %}
+      <div class="muted" style="font-size:0.8rem;">#{{ avg_overall_rank[0] }} of {{ avg_overall_rank[1] }} conferences</div>
+      {% endif %}
+    </div>
+    {% endif %}
     {% if deep.get('avg_sos') is not none %}
     <div class="card conf-accent-card">
       <div class="stat-label">Avg SOS</div>

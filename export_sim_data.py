@@ -1144,10 +1144,18 @@ def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[l
             fav_lb = lb_by_id.get(conf_favorite["team_id"], {})
             conf_favorite_name = conf_favorite["team_name"]
             conf_favorite_odds_pct = fav_lb.get("conf_champ_odds_pct", 0)
+        overall_vals = [
+            lb_by_id.get(m["team_id"], {}).get("overall_margin") for m in members
+        ]
+        overall_vals = [v for v in overall_vals if v is not None]
+        avg_overall = (
+            round(sum(overall_vals) / len(overall_vals), 2) if overall_vals else None
+        )
         out.append(
             {
                 "conference": conf,
                 "team_count": len(members),
+                "avg_overall": avg_overall,
                 "is_group_of_6": conf in GROUP_OF_6,
                 "total_title_odds_pct": round(title_sum, 2),
                 "total_conf_champ_odds_pct": round(conf_champ_sum, 2),

@@ -19,6 +19,9 @@
     </div>
     {% endif %}
     <div class="muted" style="font-size:0.85rem;margin-top:0.25rem;">
+      Avg Overall: {% if c.avg_overall is not none %}{{ "%+.1f"|format(c.avg_overall) }}{% else %}—{% endif %}
+    </div>
+    <div class="muted" style="font-size:0.85rem;margin-top:0.25rem;">
       {{ c.team_count }} teams · {{ c.sims_with_member_pct }}% of sims with member
     </div>
   </a>
@@ -30,6 +33,7 @@
     <tr>
       <th data-sort="text">Conference</th>
       <th data-sort="num">Teams</th>
+      <th data-sort="num">Avg Overall</th>
       <th data-sort="num">Title Odds Σ</th>
       <th data-sort="num">Sims w/ Member</th>
       <th data-sort="num">Member %</th>
@@ -44,6 +48,9 @@
         </a>
       </td>
       <td class="num" data-value="{{ c.team_count }}">{{ c.team_count }}</td>
+      <td class="num" data-value="{{ c.avg_overall if c.avg_overall is not none else '' }}">
+        {% if c.avg_overall is not none %}{{ "%+.1f"|format(c.avg_overall) }}{% else %}—{% endif %}
+      </td>
       <td class="num" data-value="{{ c.total_title_odds_pct }}">{{ c.total_title_odds_pct }}%</td>
       <td class="num" data-value="{{ c.sims_with_member }}">{{ c.sims_with_member }}</td>
       <td class="num" data-value="{{ c.sims_with_member_pct }}">{{ c.sims_with_member_pct }}%</td>

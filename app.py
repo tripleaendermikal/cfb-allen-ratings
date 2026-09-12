@@ -246,6 +246,23 @@ def conference_avg_sos_rank(store: "DataStore", conf_name: str) -> tuple[int, in
     return None
 
 
+def conference_avg_overall_rank(store: "DataStore", conf_name: str) -> tuple[int, int] | None:
+    """Return (rank, total) for conference avg Overall; rank 1 = highest."""
+    ranked: list[tuple[str, float]] = []
+    for c in store.conferences:
+        name = c["conference"]
+        avg_overall = c.get("avg_overall")
+        if avg_overall is not None:
+            ranked.append((name, float(avg_overall)))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda x: -x[1])
+    for i, (name, _) in enumerate(ranked, start=1):
+        if name == conf_name:
+            return i, len(ranked)
+    return None
+
+
 class DataStore:
     def __init__(self, data_dir: Path) -> None:
         self._data_dir = data_dir
@@ -1149,6 +1166,7 @@ def create_app() -> Flask:
             conference_summary = conf_summary_entry.get("summary")
             marquee_games = conf_marquee_games(store, conf_name)
             avg_sos_rank = conference_avg_sos_rank(store, conf_name)
+            avg_overall_rank = conference_avg_overall_rank(store, conf_name)
 
             return render_template(
                 "conference_detail.html",
@@ -1157,6 +1175,7 @@ def create_app() -> Flask:
                 conference_summary=conference_summary,
                 marquee_games=marquee_games,
                 avg_sos_rank=avg_sos_rank,
+                avg_overall_rank=avg_overall_rank,
                 champion_chart=deep.get("champion_chart", []),
                 finalist_chart=deep.get("finalist_chart", []),
                 playoff_hist_labels=playoff_hist_labels,
