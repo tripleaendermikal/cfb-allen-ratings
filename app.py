@@ -65,20 +65,24 @@ def resolve_overall_margin(rank_row: dict, lb_row: dict) -> float | None:
         if existing is not None:
             return float(existing)
     preseason = rank_row.get("preseason_margin") or lb_row.get("preseason_margin")
-    opp_adj = rank_row.get("opp_adj_margin")
-    if opp_adj is None:
-        opp_adj = lb_row.get("opp_adj_margin")
+    some_preseason = rank_row.get("some_preseason_margin")
+    if some_preseason is None:
+        some_preseason = lb_row.get("some_preseason_margin")
+    if some_preseason is None:
+        some_preseason = rank_row.get("opp_adj_margin")
+    if some_preseason is None:
+        some_preseason = lb_row.get("opp_adj_margin")
     algorithm = rank_row.get("algorithm_margin")
     if algorithm is None:
         algorithm = lb_row.get("algorithm_margin")
     games = rank_row.get("fbs_games_played")
     if games is None:
         games = lb_row.get("fbs_games_played", 0)
-    if preseason is None and opp_adj is None and algorithm is None:
+    if preseason is None and some_preseason is None and algorithm is None:
         return None
     return compute_overall_margin(
         preseason,
-        opp_adj or 0.0,
+        some_preseason or 0.0,
         algorithm or 0.0,
         int(games or 0),
     )
@@ -344,7 +348,9 @@ class DataStore:
             row["rank"] = rank_row.get("rank")
             row["blended_margin"] = _margin("blended_margin")
             row["algorithm_margin"] = _margin("algorithm_margin")
-            row["opp_adj_margin"] = _margin("opp_adj_margin")
+            row["some_preseason_margin"] = _margin("some_preseason_margin")
+            if row["some_preseason_margin"] is None:
+                row["some_preseason_margin"] = _margin("opp_adj_margin")
             row["overall_margin"] = resolve_overall_margin(rank_row, lb_row)
             row["rank_delta"] = rank_row.get("rank_delta", lb_row.get("rank_delta", 0))
             row["fbs_games_played"] = rank_row.get(
@@ -932,7 +938,8 @@ def create_app() -> Flask:
             "rank": lb.get("rank"),
             "display_rank": lb.get("rank"),
             "blended_margin": lb.get("blended_margin"),
-            "opp_adj_margin": lb.get("opp_adj_margin"),
+            "some_preseason_margin": lb.get("some_preseason_margin")
+            or lb.get("opp_adj_margin"),
             "overall_margin": resolve_overall_margin(lb, lb),
             "algorithm_margin": lb.get("algorithm_margin"),
             "rank_delta": lb.get("rank_delta", 0),
@@ -997,7 +1004,8 @@ def create_app() -> Flask:
                     "eligibility_pct": lb.get("eligibility_pct", 0),
                     "rank": lb.get("rank"),
                     "blended_margin": lb.get("blended_margin"),
-                    "opp_adj_margin": lb.get("opp_adj_margin"),
+                    "some_preseason_margin": lb.get("some_preseason_margin")
+                    or lb.get("opp_adj_margin"),
                     "overall_margin": resolve_overall_margin(lb, lb),
                     "algorithm_margin": lb.get("algorithm_margin"),
                     "record": lb.get("record", "0-0"),

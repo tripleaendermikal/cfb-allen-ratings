@@ -100,13 +100,15 @@ def _resolve_overall_margin(entry: dict) -> float | None:
     if existing is not None:
         return existing
     preseason = entry.get("preseason_margin")
-    opp_adj = entry.get("opp_adj_margin")
+    some_preseason = entry.get("some_preseason_margin")
+    if some_preseason is None:
+        some_preseason = entry.get("opp_adj_margin")
     algorithm = entry.get("algorithm_margin")
-    if preseason is None and opp_adj is None and algorithm is None:
+    if preseason is None and some_preseason is None and algorithm is None:
         return None
     return compute_overall_margin(
         preseason,
-        opp_adj or 0.0,
+        some_preseason or 0.0,
         algorithm or 0.0,
         int(entry.get("fbs_games_played") or 0),
     )
@@ -130,8 +132,10 @@ def load_weekly_rankings(path: Path) -> dict:
                     "raw_algorithm_margin": float(row["raw_algorithm_margin"])
                     if (row.get("raw_algorithm_margin") or "").strip()
                     else None,
-                    "opp_adj_margin": float(row["opp_adj_margin"])
-                    if (row.get("opp_adj_margin") or "").strip()
+                    "some_preseason_margin": float(
+                        row.get("some_preseason_margin") or row.get("opp_adj_margin") or ""
+                    )
+                    if (row.get("some_preseason_margin") or row.get("opp_adj_margin") or "").strip()
                     else None,
                     "overall_margin": float(row["overall_margin"])
                     if (row.get("overall_margin") or "").strip()
@@ -203,7 +207,7 @@ def merge_rankings_and_records(
         row["rank"] = rank_row.get("rank")
         row["blended_margin"] = rank_row.get("blended_margin")
         row["algorithm_margin"] = rank_row.get("algorithm_margin")
-        row["opp_adj_margin"] = rank_row.get("opp_adj_margin")
+        row["some_preseason_margin"] = rank_row.get("some_preseason_margin")
         row["overall_margin"] = _resolve_overall_margin(rank_row) if rank_row else None
         if row["overall_margin"] is None:
             row["overall_margin"] = _resolve_overall_margin(row)
