@@ -106,11 +106,14 @@ def _resolve_overall_margin(entry: dict) -> float | None:
     algorithm = entry.get("algorithm_margin")
     if preseason is None and some_preseason is None and algorithm is None:
         return None
+    week_raw = entry.get("week")
+    through_week = int(week_raw) if week_raw is not None else None
     return compute_overall_margin(
         preseason,
         some_preseason or 0.0,
         algorithm or 0.0,
         int(entry.get("fbs_games_played") or 0),
+        through_week=through_week,
     )
 
 
@@ -123,6 +126,7 @@ def load_weekly_rankings(path: Path) -> dict:
         for row in csv.DictReader(handle):
             week = int(row["week"])
             entry = {
+                    "week": week,
                     "team_id": row["team_id"],
                     "team_name": row.get("team_name", ""),
                     "conference": row.get("conference", ""),

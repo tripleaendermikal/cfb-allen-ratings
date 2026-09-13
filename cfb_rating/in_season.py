@@ -308,6 +308,7 @@ def overall_component_weights(
     *,
     full_games: int = DEFAULT_OVERALL_FULL_GAMES,
     some_preseason_cutoff: int = DEFAULT_OVERALL_SOME_PRESEASON_CUTOFF,
+    through_week: Optional[int] = None,
 ) -> tuple[float, float, float]:
     """Return (preseason_w, some_preseason_w, algorithm_w) for Overall margin."""
     games = max(games_played, 0)
@@ -317,9 +318,14 @@ def overall_component_weights(
         return (0.0, 0.0, 1.0)
     if games <= some_preseason_cutoff:
         pct = games / (2.0 * full_games)
-        return (1.0 - 2.0 * pct, pct, pct)
-    algo_weight = games / full_games
-    return (1.0 - algo_weight, 0.0, algo_weight)
+        w_pre, w_some, w_algo = (1.0 - 2.0 * pct, pct, pct)
+    else:
+        algo_weight = games / full_games
+        w_pre, w_some, w_algo = (1.0 - algo_weight, 0.0, algo_weight)
+    if through_week is not None and through_week <= 4 and w_algo > 0.0:
+        w_some += 0.5 * w_algo
+        w_algo *= 0.5
+    return (w_pre, w_some, w_algo)
 
 
 def compute_overall_margin(
@@ -329,10 +335,13 @@ def compute_overall_margin(
     games_played: int,
     *,
     full_games: int = DEFAULT_OVERALL_FULL_GAMES,
+    through_week: Optional[int] = None,
 ) -> float:
     """Blend preseason, Some Preseason, and No Preseason into the Overall margin."""
     w_pre, w_some, w_algo = overall_component_weights(
-        games_played, full_games=full_games
+        games_played,
+        full_games=full_games,
+        through_week=through_week,
     )
     if w_pre == 1.0:
         if preseason_margin is not None:
@@ -352,6 +361,7 @@ def compute_overall_margins(
     team_ids: Sequence[str],
     *,
     full_games: int = DEFAULT_OVERALL_FULL_GAMES,
+    through_week: Optional[int] = None,
 ) -> Dict[str, float]:
     """Compute Overall margin per team."""
     return {
@@ -361,6 +371,7 @@ def compute_overall_margins(
             algorithm_margins[team_id],
             games_played.get(team_id, 0),
             full_games=full_games,
+            through_week=through_week,
         )
         for team_id in team_ids
     }
@@ -433,6 +444,7 @@ def compute_in_season_rankings_for_week(
         algorithm_margins,
         games_played,
         team_ids,
+        through_week=through_week,
     )
 
     info = team_info or {}

@@ -80,11 +80,16 @@ def resolve_overall_margin(rank_row: dict, lb_row: dict) -> float | None:
         games = lb_row.get("fbs_games_played", 0)
     if preseason is None and some_preseason is None and algorithm is None:
         return None
+    week_raw = rank_row.get("week")
+    if week_raw is None:
+        week_raw = lb_row.get("week")
+    through_week = int(week_raw) if week_raw is not None else None
     return compute_overall_margin(
         preseason,
         some_preseason or 0.0,
         algorithm or 0.0,
         int(games or 0),
+        through_week=through_week,
     )
 
 
