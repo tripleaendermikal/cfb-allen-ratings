@@ -25,7 +25,7 @@ def _data_root() -> Path:
 DEFAULT_PRESEASON_CSV = _data_root() / "Preseason_2026.csv"
 DEFAULT_PRESEASON_BLENDED_CSV = _data_root() / "Preseason_2026_blended.csv"
 DEFAULT_FADE_GAMES = 10
-DEFAULT_OVERALL_ALGO_START_WEIGHT = 0.03
+DEFAULT_OVERALL_ALGO_START_WEIGHT = 0.05
 DEFAULT_OVERALL_ALGO_GROWTH = 1.5
 DEFAULT_OVERALL_ALGO_FULL_GAMES = 9
 DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES = 6
@@ -317,9 +317,13 @@ def overall_component_weights(games_played: int) -> tuple[float, float, float]:
     )
     if games <= DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES:
         w_some = 2.0 * w_algo
+        w_pre = 1.0 - w_some - w_algo
+        if w_pre < 0.0:
+            w_some = 1.0 - w_algo
+            w_pre = 0.0
     else:
         w_some = 1.0 - w_algo
-    w_pre = 1.0 - w_some - w_algo
+        w_pre = 1.0 - w_some - w_algo
     return (w_pre, w_some, w_algo)
 
 
