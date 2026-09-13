@@ -106,14 +106,11 @@ def _resolve_overall_margin(entry: dict) -> float | None:
     algorithm = entry.get("algorithm_margin")
     if preseason is None and some_preseason is None and algorithm is None:
         return None
-    week_raw = entry.get("week")
-    through_week = int(week_raw) if week_raw is not None else None
     return compute_overall_margin(
         preseason,
         some_preseason or 0.0,
         algorithm or 0.0,
         int(entry.get("fbs_games_played") or 0),
-        through_week=through_week,
     )
 
 

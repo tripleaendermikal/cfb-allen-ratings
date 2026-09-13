@@ -25,8 +25,10 @@ def _data_root() -> Path:
 DEFAULT_PRESEASON_CSV = _data_root() / "Preseason_2026.csv"
 DEFAULT_PRESEASON_BLENDED_CSV = _data_root() / "Preseason_2026_blended.csv"
 DEFAULT_FADE_GAMES = 10
-DEFAULT_OVERALL_FULL_GAMES = 8
-DEFAULT_OVERALL_SOME_PRESEASON_CUTOFF = 4
+DEFAULT_OVERALL_ALGO_START_WEIGHT = 0.03
+DEFAULT_OVERALL_ALGO_GROWTH = 1.5
+DEFAULT_OVERALL_ALGO_FULL_GAMES = 9
+DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES = 6
 DEFAULT_SOME_PRESEASON_Z_SCALE = 0.05
 DEFAULT_MAX_WEEK = 14
 DEFAULT_ALGORITHM_MARGIN_MIN = -40.0
@@ -303,28 +305,21 @@ def avg_opponent_blended_played(
     return sum(blended_margins[oid] for oid in opp_ids) / len(opp_ids)
 
 
-def overall_component_weights(
-    games_played: int,
-    *,
-    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
-    some_preseason_cutoff: int = DEFAULT_OVERALL_SOME_PRESEASON_CUTOFF,
-    through_week: Optional[int] = None,
-) -> tuple[float, float, float]:
+def overall_component_weights(games_played: int) -> tuple[float, float, float]:
     """Return (preseason_w, some_preseason_w, algorithm_w) for Overall margin."""
     games = max(games_played, 0)
     if games <= 0:
         return (1.0, 0.0, 0.0)
-    if games >= full_games:
+    if games >= DEFAULT_OVERALL_ALGO_FULL_GAMES:
         return (0.0, 0.0, 1.0)
-    if games <= some_preseason_cutoff:
-        pct = games / (2.0 * full_games)
-        w_pre, w_some, w_algo = (1.0 - 2.0 * pct, pct, pct)
+    w_algo = DEFAULT_OVERALL_ALGO_START_WEIGHT * (
+        DEFAULT_OVERALL_ALGO_GROWTH ** (games - 1)
+    )
+    if games <= DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES:
+        w_some = 2.0 * w_algo
     else:
-        algo_weight = games / full_games
-        w_pre, w_some, w_algo = (1.0 - algo_weight, 0.0, algo_weight)
-    if through_week is not None and through_week <= 4 and w_algo > 0.0:
-        w_some += 0.5 * w_algo
-        w_algo *= 0.5
+        w_some = 1.0 - w_algo
+    w_pre = 1.0 - w_some - w_algo
     return (w_pre, w_some, w_algo)
 
 
@@ -333,16 +328,9 @@ def compute_overall_margin(
     some_preseason_margin: float,
     algorithm_margin: float,
     games_played: int,
-    *,
-    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
-    through_week: Optional[int] = None,
 ) -> float:
     """Blend preseason, Some Preseason, and No Preseason into the Overall margin."""
-    w_pre, w_some, w_algo = overall_component_weights(
-        games_played,
-        full_games=full_games,
-        through_week=through_week,
-    )
+    w_pre, w_some, w_algo = overall_component_weights(games_played)
     if w_pre == 1.0:
         if preseason_margin is not None:
             return preseason_margin
@@ -359,9 +347,6 @@ def compute_overall_margins(
     algorithm_margins: Mapping[str, float],
     games_played: Mapping[str, int],
     team_ids: Sequence[str],
-    *,
-    full_games: int = DEFAULT_OVERALL_FULL_GAMES,
-    through_week: Optional[int] = None,
 ) -> Dict[str, float]:
     """Compute Overall margin per team."""
     return {
@@ -370,8 +355,6 @@ def compute_overall_margins(
             some_preseason_margins[team_id],
             algorithm_margins[team_id],
             games_played.get(team_id, 0),
-            full_games=full_games,
-            through_week=through_week,
         )
         for team_id in team_ids
     }
@@ -444,7 +427,6 @@ def compute_in_season_rankings_for_week(
         algorithm_margins,
         games_played,
         team_ids,
-        through_week=through_week,
     )
 
     info = team_info or {}
