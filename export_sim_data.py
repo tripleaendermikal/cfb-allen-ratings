@@ -587,6 +587,13 @@ def write_json(path: Path, data: object) -> int:
     return len(text.encode("utf-8"))
 
 
+def _optional_float(value: str | None) -> float | None:
+    text = (value or "").strip()
+    if not text or text.lower() == "none":
+        return None
+    return float(text)
+
+
 def normalize_hex(raw: str | None) -> str | None:
     if not raw:
         return None
@@ -994,8 +1001,8 @@ def build_schedule(
                 "neutral_site": row.get("neutral_site", ""),
                 "opponent_id": row.get("opponent_id", ""),
                 "opponent_name": row.get("opponent_name", ""),
-                "team_fpi": float(row["team_fpi"]) if row.get("team_fpi") else None,
-                "opponent_fpi": float(row["opponent_fpi"]) if row.get("opponent_fpi") else None,
+                "team_fpi": _optional_float(row.get("team_fpi")),
+                "opponent_fpi": _optional_float(row.get("opponent_fpi")),
                 "win_pct": win_pct,
                 "avg_margin": round(margin, 3) if margin is not None else None,
             }

@@ -13,20 +13,28 @@ SUMMARY_URL = (
 
 
 def fetch_json(url: str, *, user_agent: bool = False) -> dict:
-    cmd = ["curl.exe", "-sS"]
-    if user_agent:
-        cmd.extend(["--compressed", "-H", "User-Agent: Mozilla/5.0"])
-    cmd.append(url)
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        timeout=120,
-        check=False,
-    )
-    if proc.returncode != 0:
-        stderr = proc.stderr.decode("utf-8", errors="replace")
-        raise RuntimeError(stderr or f"curl failed: {proc.returncode}")
-    return json.loads(proc.stdout.decode("utf-8"))
+    import urllib.request
+
+    headers = {"User-Agent": "Mozilla/5.0"} if user_agent else {}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        cmd = ["curl", "-sS"]
+        if user_agent:
+            cmd.extend(["--compressed", "-H", "User-Agent: Mozilla/5.0"])
+        cmd.append(url)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(stderr or f"curl failed: {proc.returncode}")
+        return json.loads(proc.stdout.decode("utf-8"))
 
 
 def stat_display_value(statistics: Iterable[dict], stat_name: str) -> Optional[str]:
