@@ -28,7 +28,7 @@ from typing import Dict, Iterable, List, Set, Tuple
 
 
 
-from cfb_espn_summary import fetch_game_yards
+from cfb_espn_summary import fetch_game_yards, fetch_json
 
 from cfb_game_corrections import (
 
@@ -56,29 +56,6 @@ YARD_COLUMNS = ("team_yards", "opponent_yards")
 
 
 
-
-
-def fetch_json(url: str) -> dict:
-
-    proc = subprocess.run(
-
-        ["curl.exe", "-sS", url],
-
-        capture_output=True,
-
-        timeout=120,
-
-        check=False,
-
-    )
-
-    if proc.returncode != 0:
-
-        stderr = proc.stderr.decode("utf-8", errors="replace")
-
-        raise RuntimeError(stderr or f"curl failed: {proc.returncode}")
-
-    return json.loads(proc.stdout.decode("utf-8"))
 
 
 
