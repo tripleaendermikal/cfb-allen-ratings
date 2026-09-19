@@ -32,17 +32,26 @@ DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES = 6
 DEFAULT_SOME_PRESEASON_Z_SCALE = 0.05
 DEFAULT_MAX_WEEK = 14
 DEFAULT_ALGORITHM_MARGIN_MIN = -40.0
-DEFAULT_ALGORITHM_MARGIN_MAX = 40.0
+DEFAULT_ALGORITHM_MARGIN_BASE_CEILING = 30.0
+
+
+def algorithm_margin_ceiling(fbs_games_played: int) -> float:
+    """No Preseason ceiling: 30 + FBS games played by the team."""
+    return DEFAULT_ALGORITHM_MARGIN_BASE_CEILING + max(fbs_games_played, 0)
 
 
 def clamp_algorithm_margin(
     margin: float,
     *,
+    fbs_games_played: int = 0,
     min_margin: float = DEFAULT_ALGORITHM_MARGIN_MIN,
-    max_margin: float = DEFAULT_ALGORITHM_MARGIN_MAX,
+    max_margin: float | None = None,
 ) -> float:
     """Clamp No Preseason (algorithm) margin for display and blending."""
-    return max(min_margin, min(max_margin, margin))
+    ceiling = max_margin if max_margin is not None else algorithm_margin_ceiling(
+        fbs_games_played
+    )
+    return max(min_margin, min(ceiling, margin))
 
 
 def norm_name(value: str) -> str:
@@ -247,7 +256,10 @@ def compute_some_preseason_margins(
         iterations=iterations,
     )
     algo_margins = {
-        team_id: clamp_algorithm_margin(result.margin_rating)
+        team_id: clamp_algorithm_margin(
+            result.margin_rating,
+            fbs_games_played=games_played.get(team_id, 0),
+        )
         for team_id, result in compute_margin_ratings(ratings).items()
     }
     margins: Dict[str, float] = {}
@@ -407,7 +419,10 @@ def compute_in_season_rankings_for_week(
         team_id: result.margin_rating for team_id, result in margin_results.items()
     }
     algorithm_margins = {
-        team_id: clamp_algorithm_margin(margin)
+        team_id: clamp_algorithm_margin(
+            margin,
+            fbs_games_played=games_played.get(team_id, 0),
+        )
         for team_id, margin in raw_algorithm_margins.items()
     }
     blended_margins = blend_in_season_margins(
