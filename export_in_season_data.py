@@ -5,14 +5,15 @@ from __future__ import annotations
 
 import csv
 import math
-import os
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent
-ROOT = Path(os.environ.get("CFB_DATA_ROOT", str(APP_DIR.parent)))
+from cfb_paths import REPO_ROOT, data_root
+
+APP_DIR = REPO_ROOT
+ROOT = data_root()
 DATA_DIR = APP_DIR / "data"
 
 if str(APP_DIR) not in sys.path:

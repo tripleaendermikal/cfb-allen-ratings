@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import csv
-import os
+import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Union
 
+from cfb_game_corrections import (
+    get_score_overrides,
+    get_yard_overrides,
+    load_corrections,
+)
+from cfb_paths import data_root
 from cfb_rating.rating_algorithm import GameRecord
 
-
-def _data_root() -> Path:
-    env = os.environ.get("CFB_DATA_ROOT")
-    if env:
-        return Path(env)
-    return Path(__file__).resolve().parent.parent.parent
-
-
 DEFAULT_YARDS_PER_POINT = 15.5
-DEFAULT_ESPN_GAMES_CSV = _data_root() / "cfb_2025_espn_games.csv"
-DEFAULT_ESPN_TEAMS_CSV = _data_root() / "espn_cfb_teams_conferences.csv"
+DEFAULT_ESPN_GAMES_CSV = data_root() / "cfb_2025_espn_games.csv"
+DEFAULT_ESPN_TEAMS_CSV = data_root() / "espn_cfb_teams_conferences.csv"
+
+logger = logging.getLogger(__name__)
 
 FBS_CONFERENCES = {
     "ACC",
@@ -62,6 +62,15 @@ def _estimate_yards(points: float, yards_per_point: float) -> float:
     return max(points, 0.0) * yards_per_point
 
 
+def _parse_optional_yards(value: str) -> Optional[float]:
+    if value is None or str(value).strip() == "":
+        return None
+    yards = float(value)
+    if yards <= 0:
+        return None
+    return yards
+
+
 def load_season_games(
     path: Union[str, Path],
     *,
@@ -71,11 +80,7 @@ def load_season_games(
     estimate_yards: bool = True,
     yards_per_point: float = DEFAULT_YARDS_PER_POINT,
 ) -> List[GameRecord]:
-    """Load games from a season CSV into ``GameRecord`` rows.
-
-    By default, drops any game with an FCS team, keeps completed FBS vs FBS
-  games, and estimates yards from points when the file has no yardage columns.
-    """
+    """Load games from a season CSV into ``GameRecord`` rows."""
     games: List[GameRecord] = []
     path = Path(path)
 
@@ -169,6 +174,7 @@ def load_espn_games(
 
             week_raw = (row.get("week") or "").strip()
             season_raw = (row.get("season") or "").strip()
+            neutral_raw = (row.get("neutral_site") or "").strip().lower()
             games.append(
                 GameRecord(
                     home_team_id=home_team_id,
@@ -180,6 +186,7 @@ def load_espn_games(
                     game_id=row.get("game_id") or None,
                     week=int(week_raw) if week_raw else None,
                     season=int(season_raw) if season_raw else None,
+                    neutral_site=neutral_raw in ("true", "1", "yes"),
                 )
             )
 
@@ -197,6 +204,7 @@ def load_fbs_schedule_games(
     """Load completed games from the duplicated team-perspective FBS schedule CSV."""
     path = Path(path)
     fbs_teams = load_fbs_team_ids(teams_path) if fbs_only else None
+    corrections = load_corrections()
     games: List[GameRecord] = []
     seen: set[str] = set()
 
@@ -234,10 +242,40 @@ def load_fbs_schedule_games(
                 home_score = 0.0
                 away_score = 0.0
 
+            override_home_score, override_away_score = get_score_overrides(
+                corrections, game_id
+            )
+            if override_home_score is not None:
+                home_score = override_home_score
+            if override_away_score is not None:
+                away_score = override_away_score
+
             week_raw = (row.get("week") or "").strip()
             season_raw = (row.get("season_year") or row.get("season") or "").strip()
-            home_yards = _estimate_yards(home_score, yards_per_point)
-            away_yards = _estimate_yards(away_score, yards_per_point)
+            home_yards = _parse_optional_yards(row.get("team_yards", ""))
+            away_yards = _parse_optional_yards(row.get("opponent_yards", ""))
+            if home_yards is None:
+                home_yards = _estimate_yards(home_score, yards_per_point)
+                logger.warning(
+                    "Game %s: missing home yards; estimated %.1f from points",
+                    game_id,
+                    home_yards,
+                )
+            if away_yards is None:
+                away_yards = _estimate_yards(away_score, yards_per_point)
+                logger.warning(
+                    "Game %s: missing away yards; estimated %.1f from points",
+                    game_id,
+                    away_yards,
+                )
+
+            override_home_yards, override_away_yards = get_yard_overrides(
+                corrections, game_id
+            )
+            if override_home_yards is not None:
+                home_yards = override_home_yards
+            if override_away_yards is not None:
+                away_yards = override_away_yards
 
             games.append(
                 GameRecord(

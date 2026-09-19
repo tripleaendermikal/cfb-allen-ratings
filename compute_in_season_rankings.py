@@ -2,9 +2,9 @@
 """Compute weekly in-season FBS rankings with preseason margin fade."""
 
 import argparse
-import os
 from pathlib import Path
 
+from cfb_paths import data_root
 from cfb_rating.in_season import (
     DEFAULT_MAX_WEEK,
     compute_weekly_in_season_rankings,
@@ -14,11 +14,8 @@ from cfb_rating.in_season import (
 )
 from cfb_rating.season_data import load_fbs_team_ids, load_games_for_in_season_rankings
 
-APP_DIR = Path(__file__).resolve().parent
-DATA_ROOT = Path(os.environ.get("CFB_DATA_ROOT", str(APP_DIR.parent)))
-
-DEFAULT_GAMES = DATA_ROOT / "cfb_2026_fbs_games_with_fpi.csv"
-DEFAULT_OUTPUT = DATA_ROOT / "cfb_2026_in_season_weekly_rankings.csv"
+DEFAULT_GAMES = data_root() / "cfb_2026_fbs_games_with_fpi.csv"
+DEFAULT_OUTPUT = data_root() / "cfb_2026_in_season_weekly_rankings.csv"
 
 
 def main() -> None:

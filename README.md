@@ -5,72 +5,62 @@ In-season college football power rankings and Monte Carlo projections.
 - **Live site:** [cfballenratings.onrender.com](https://cfballenratings.onrender.com)
 - **Preseason viewer (separate repo):** [cfb-viewer.onrender.com](https://cfb-viewer.onrender.com)
 
-This repo is **separate** from [cfb-viewer](https://github.com/tripleaendermikal/cfb-viewer). It contains the Flask app, weekly rankings pipeline, export scripts, and committed `data/*.json` for Render.
+This repo contains the Flask app, **full in-season pipeline**, export scripts, and committed `data/*.json` for Render.
+
+**Pipeline guide:** [docs/IN_SEASON_RANKINGS.md](docs/IN_SEASON_RANKINGS.md)
 
 ## Repo layout
 
 ```
-app.py, wsgi.py              Flask app
-templates/, static/          UI
-data/                        Exported JSON (committed; served on Render)
-data/sim/                    Per-sim bracket JSON (1000 files max; stale files pruned on export)
+app.py, wsgi.py                Flask app
+templates/, static/            UI
+data/                          Exported JSON (committed; served on Render)
 cfb_rating/                    Rankings algorithm package
-compute_in_season_rankings.py  Weekly rankings CLI
-export_in_season_data.py       CSV → JSON export for the app
-export_sim_data.py             Vendored export builders (from cfb-viewer)
-cfb_in_season_sim.py           Shared in-season helpers
+update_in_season_weekly.py     End-to-end weekly orchestrator
+run_in_season_sim_pipeline.py  Monte Carlo sim stack
+refresh_2026_schedule_scores.py
+compute_in_season_rankings.py
+export_in_season_data.py       CSV → JSON export
+cfb_playoff_*.py, cfb_conf_*.py  Playoff / conference helpers
+cfb_paths.py                   CFB_DATA_ROOT path helper
 ```
 
 ## Local CSV inputs (`CFB_DATA_ROOT`)
 
-Simulation CSVs, preseason FPI, and ESPN team metadata live **outside** this repo. By default scripts read from the parent directory of this repo (`C:\Users\ender` on this machine).
-
-Set `CFB_DATA_ROOT` to override:
+Simulation CSVs, preseason FPI, and ESPN team metadata live **outside** this repo by default (parent directory of the clone).
 
 ```powershell
-$env:CFB_DATA_ROOT = "C:\Users\ender"
+$env:CFB_DATA_ROOT = "C:\Users\ender"   # optional override
+cd C:\Users\ender\cfb-allen-ratings
+python update_in_season_weekly.py
 ```
 
 Required inputs (under `CFB_DATA_ROOT`):
 
-- `cfb_2026_in_season_*` — in-season sim outputs
 - `cfb_2026_fbs_games_with_fpi.csv` — schedule + scores
-- `cfb_2026_in_season_weekly_rankings.csv` — rankings output (written by compute script)
+- `cfb_2026_in_season_*` — sim outputs (written by pipeline)
+- `cfb_2026_in_season_weekly_rankings.csv` — rankings output
 - `Preseason_2026_blended.csv` (or `Preseason_2026.csv`)
 - `espn_cfb_teams_conferences.csv`
-
-The in-season sim pipeline (`run_in_season_sim_pipeline.py`) remains in the parent workspace.
 
 ## Weekly refresh
 
 ```powershell
-# All-in-one: scores → sims → rankings → JSON export
-python C:\Users\ender\update_in_season_weekly.py
-
-# Or step by step:
-# 1. Refresh ESPN scores + in-season sims (parent workspace)
-python C:\Users\ender\refresh_2026_schedule_scores.py
-python C:\Users\ender\run_in_season_sim_pipeline.py --skip-refresh
-
-# 2. Weekly rankings
-python C:\Users\ender\compute_in_season_rankings.py
-
-# 3. Export JSON (move, fcst wins, playoff%, title%)
-python C:\Users\ender\cfb-allen-ratings\export_in_season_data.py
-
-# 4. Push to GitHub (Render auto-redeploys)
 cd C:\Users\ender\cfb-allen-ratings
+python update_in_season_weekly.py
+
+# Push to GitHub (Render auto-redeploys)
 git add data/*.json data/sim/
 git commit -m "Update in-season data for week N"
 git push
 ```
 
-Exports write at most **1000** sim JSON files (`0001.json`–`1000.json`). Older 10k-era files are deleted on export and blocked by `.gitignore` if they reappear.
+Exports write at most **1000** sim JSON files (`0001.json`–`1000.json`).
 
 ## Local dev
 
 ```powershell
-python C:\Users\ender\cfb-allen-ratings\app.py
+python app.py
 # http://127.0.0.1:5000
 ```
 
@@ -79,6 +69,5 @@ python C:\Users\ender\cfb-allen-ratings\app.py
 - **Repo:** `tripleaendermikal/cfb-allen-ratings`
 - **Build:** `pip install -r requirements.txt`
 - **Start:** `gunicorn wsgi:app --bind 0.0.0.0:$PORT`
-- Or use [`render.yaml`](render.yaml) blueprint (service name `CFBAllenRatings`)
 
 Render serves committed `data/` JSON only — no CSV processing at runtime.
