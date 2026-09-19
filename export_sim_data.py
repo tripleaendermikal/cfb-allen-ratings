@@ -1516,6 +1516,15 @@ def write_sim_files(
             "conf_finalists": finalists_by_sim[sim_idx] if sim_idx < len(finalists_by_sim) else {},
         }
         total += write_json(sim_dir / f"{sim_idx + 1:04d}.json", payload)
+
+    for path in sim_dir.glob("*.json"):
+        try:
+            sim_idx = int(path.stem)
+        except ValueError:
+            continue
+        if sim_idx > sim_count:
+            path.unlink()
+
     return total
 
 

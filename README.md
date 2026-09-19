@@ -13,6 +13,7 @@ This repo is **separate** from [cfb-viewer](https://github.com/tripleaendermikal
 app.py, wsgi.py              Flask app
 templates/, static/          UI
 data/                        Exported JSON (committed; served on Render)
+data/sim/                    Per-sim bracket JSON (1000 files max; stale files pruned on export)
 cfb_rating/                    Rankings algorithm package
 compute_in_season_rankings.py  Weekly rankings CLI
 export_in_season_data.py       CSV → JSON export for the app
@@ -59,10 +60,12 @@ python C:\Users\ender\cfb-allen-ratings\export_in_season_data.py
 
 # 4. Push to GitHub (Render auto-redeploys)
 cd C:\Users\ender\cfb-allen-ratings
-git add data/
+git add data/*.json data/sim/
 git commit -m "Update in-season data for week N"
 git push
 ```
+
+Exports write at most **1000** sim JSON files (`0001.json`–`1000.json`). Older 10k-era files are deleted on export and blocked by `.gitignore` if they reappear.
 
 ## Local dev
 
