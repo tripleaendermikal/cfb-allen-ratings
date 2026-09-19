@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -541,14 +542,20 @@ def build_conference_summaries(
     }
 
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(__file__).resolve().parent / "data"
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+APP_DIR = Path(__file__).resolve().parent
+ROOT = Path(os.environ.get("CFB_DATA_ROOT", str(APP_DIR.parent)))
+DATA_DIR = APP_DIR / "data"
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
-from cfb_conf_championship import compute_conf_results_by_sim
-from cfb_playoff_odds import championship_odds_exact
-from cfb_playoff_odds_calc import load_sim_fpi_by_team
+try:
+    from cfb_conf_championship import compute_conf_results_by_sim
+    from cfb_playoff_odds import championship_odds_exact
+    from cfb_playoff_odds_calc import load_sim_fpi_by_team
+except ImportError:
+    from pipeline.cfb_conf_championship import compute_conf_results_by_sim
+    from pipeline.cfb_playoff_odds import championship_odds_exact
+    from pipeline.cfb_playoff_odds_calc import load_sim_fpi_by_team
 
 SOURCES = {
     "champ_odds": ROOT / "cfb_2026_FBS_playoff_champ_odds_fpi_seed.csv",

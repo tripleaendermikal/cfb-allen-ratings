@@ -42,6 +42,15 @@ The in-season sim pipeline (`run_in_season_sim_pipeline.py`) remains in the pare
 
 ## Weekly refresh
 
+Cloud agents and Linux:
+
+```bash
+export CFB_DATA_ROOT=/path/to/csv/root   # default: parent of this repo
+python update_in_season_weekly.py
+```
+
+Windows (parent workspace):
+
 ```powershell
 # All-in-one: scores → sims → rankings → JSON export
 python C:\Users\ender\update_in_season_weekly.py
