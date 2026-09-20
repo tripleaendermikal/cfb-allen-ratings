@@ -229,6 +229,14 @@ def overall_component_weights(games_played: int) -> tuple[float, float, float]:
     return (w_pre, w_some, w_algo)
 
 
+def overall_blend_weights(games_played: int) -> tuple[float, float, float]:
+    """Overall margin weights; half of Opp Adj share redistributed to No Preseason."""
+    w_pre, w_some, w_algo = overall_component_weights(games_played)
+    w_algo = w_algo + 0.5 * w_some
+    w_some = 0.5 * w_some
+    return (w_pre, w_some, w_algo)
+
+
 def compute_overall_margin(
     preseason_margin: Optional[float],
     some_preseason_margin: float,
@@ -236,7 +244,7 @@ def compute_overall_margin(
     games_played: int,
 ) -> float:
     """Blend preseason, Some Preseason, and No Preseason into the Overall margin."""
-    w_pre, w_some, w_algo = overall_component_weights(games_played)
+    w_pre, w_some, w_algo = overall_blend_weights(games_played)
     if w_pre == 1.0:
         if preseason_margin is not None:
             return preseason_margin

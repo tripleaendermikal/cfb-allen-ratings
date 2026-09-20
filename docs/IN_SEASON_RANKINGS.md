@@ -53,7 +53,7 @@ Primary sort and sim FPI base. Let `n` = FBS games played:
 | Games | Overall blend |
 |-------|----------------|
 | 0 | 100% preseason |
-| 1–4 | Preseason + Opp Adj + No Preseason (5% each per game, with early-season Opp Adj boost) |
+| 1–4 | Preseason + Opp Adj + No Preseason (No Pre gets half of Opp Adj's share redistributed from it) |
 | 5–9 | Preseason fades; Opp Adj drops out; No Preseason ramps to 100% |
 | 10+ | 100% No Preseason (algorithm margin) |
 
