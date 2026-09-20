@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import statistics
 import unittest
 from pathlib import Path
 
@@ -13,9 +14,12 @@ from cfb_rating.in_season import (
     load_preseason_margins,
 )
 from cfb_rating.opp_adjust import (
+    OPP_ADJ_TARGET_STDEV,
     anchor_preseason_weight,
     compute_opponent_adjusted_margins,
     compute_pilot_overall,
+    normalize_opp_adj_margins,
+    sample_shrinkage_weight,
     stable_opponent_strength,
 )
 from cfb_rating.rating_algorithm import GameRecord
@@ -41,6 +45,45 @@ def _week3_rankings():
 
 def _row(rows, team_id: str):
     return next(r for r in rows if r.team_id == team_id)
+
+
+class SampleShrinkageWeightTests(unittest.TestCase):
+    def test_one_game_ten_percent(self) -> None:
+        self.assertAlmostEqual(sample_shrinkage_weight(1), 0.1)
+
+    def test_ten_games_full_weight(self) -> None:
+        self.assertAlmostEqual(sample_shrinkage_weight(10), 1.0)
+        self.assertAlmostEqual(sample_shrinkage_weight(12), 1.0)
+
+
+class NormalizeOppAdjMarginsTests(unittest.TestCase):
+    def test_zero_game_teams_excluded_from_zscore(self) -> None:
+        preseason = {"0g": 15.0, "1g": 0.0, "2g": 0.0}
+        raw = {"0g": 0.0, "1g": 1.0, "2g": -1.0}
+        games_played = {"0g": 0, "1g": 10, "2g": 10}
+        margins = normalize_opp_adj_margins(
+            raw, games_played, preseason, ["0g", "1g", "2g"]
+        )
+        self.assertAlmostEqual(margins["0g"], 15.0)
+        self.assertAlmostEqual(margins["1g"], OPP_ADJ_TARGET_STDEV)
+        self.assertAlmostEqual(margins["2g"], -OPP_ADJ_TARGET_STDEV)
+
+    def test_one_game_shrinkage_dampens_zscore(self) -> None:
+        preseason = {"hi": 0.0, "lo": 0.0}
+        raw = {"hi": 2.0, "lo": -2.0}
+        games_played = {"hi": 1, "lo": 1}
+        margins = normalize_opp_adj_margins(raw, games_played, preseason, ["hi", "lo"])
+        self.assertAlmostEqual(margins["hi"], 0.1 * OPP_ADJ_TARGET_STDEV)
+        self.assertAlmostEqual(margins["lo"], -0.1 * OPP_ADJ_TARGET_STDEV)
+
+    def test_full_sample_spread_near_target_stdev(self) -> None:
+        team_ids = [str(i) for i in range(10)]
+        raw = {team_id: float(i) for team_id, i in zip(team_ids, range(10))}
+        games_played = {team_id: 10 for team_id in team_ids}
+        preseason = {team_id: 0.0 for team_id in team_ids}
+        margins = normalize_opp_adj_margins(raw, games_played, preseason, team_ids)
+        vals = [margins[team_id] for team_id in team_ids]
+        self.assertAlmostEqual(statistics.pstdev(vals), OPP_ADJ_TARGET_STDEV, places=5)
 
 
 class AnchorPreseasonWeightTests(unittest.TestCase):
@@ -109,8 +152,7 @@ class SyntheticResidualTests(unittest.TestCase):
         margins = compute_opponent_adjusted_margins(
             games, ["bama", "ecu"], preseason, algo, played
         )
-        self.assertLess(margins["bama"], 20.0)
-        self.assertGreater(margins["bama"], -5.0)
+        self.assertLess(abs(margins["bama"]), OPP_ADJ_TARGET_STDEV)
 
     def test_road_win_vs_strong_opponent_positive_residual(self) -> None:
         """Kentucky-style: road win over preseason-strong opponent."""
@@ -133,7 +175,7 @@ class SyntheticResidualTests(unittest.TestCase):
         margins = compute_opponent_adjusted_margins(
             games, ["uk", "tam"], preseason, algo, played
         )
-        self.assertGreater(margins["uk"], 2.0)
+        self.assertGreater(margins["uk"], 0.0)
 
     def test_loss_to_strong_opponent_negative_residual(self) -> None:
         """Ohio State-style: close road loss to strong opponent."""
@@ -166,16 +208,22 @@ class Week3IntegrationTests(unittest.TestCase):
         self.assertGreater(uk.some_preseason_margin, 0.0)
         self.assertGreater(uk.overall_margin, -0.5)
 
-    def test_alabama_opp_adj_modest(self) -> None:
+    def test_week3_opp_adj_spread(self) -> None:
         rows = _week3_rankings()
-        bama = _row(rows, "333")
-        self.assertLess(barm := bama.some_preseason_margin, 15.0)
-        self.assertGreater(barm, -10.0)
+        played = [r for r in rows if r.fbs_games_played > 0]
+        vals = [r.some_preseason_margin for r in played]
+        self.assertGreaterEqual(statistics.pstdev(vals), 2.0)
+        self.assertLessEqual(statistics.pstdev(vals), 15.0)
 
-    def test_south_carolina_opp_adj_below_old_ceiling(self) -> None:
+    def test_one_game_team_not_at_top(self) -> None:
         rows = _week3_rankings()
-        sc = _row(rows, "2579")
-        self.assertLess(sc.some_preseason_margin, 25.0)
+        top3 = sorted(rows, key=lambda r: -r.some_preseason_margin)[:3]
+        one_game_top3 = [r for r in top3 if r.fbs_games_played == 1]
+        self.assertEqual(len(one_game_top3), 0)
+        one_game = [r for r in rows if r.fbs_games_played == 1]
+        if one_game:
+            best_one_game = max(r.some_preseason_margin for r in one_game)
+            self.assertLess(best_one_game, 5.0)
 
     def test_some_preseason_top25_not_mac_heavy(self) -> None:
         rows = _week3_rankings()

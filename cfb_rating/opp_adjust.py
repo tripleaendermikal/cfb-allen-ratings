@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import statistics
 from typing import Dict, Mapping, Optional, Sequence
 
 from cfb_rating.rating_algorithm import GameRecord
@@ -9,6 +11,9 @@ from cfb_rating.rating_algorithm import GameRecord
 # Maps preseason/FPI margin units to per-game margin units for residual comparison.
 FPI_MARGIN_SCALE = 8.0
 YARDS_PER_POINT = 15.5
+OPP_ADJ_TARGET_STDEV = 12.0
+OPP_ADJ_SHRINK_MIN_GAMES = 1
+OPP_ADJ_SHRINK_FULL_GAMES = 10
 
 
 def home_field_adjustment(neutral_site: bool, home_away: str) -> float:
@@ -73,6 +78,60 @@ def game_actual_margin(
         point_margin = away_score - home_score
         yard_margin = away_yards - home_yards
     return (point_margin + 0.25 * yard_margin / YARDS_PER_POINT) / FPI_MARGIN_SCALE
+
+
+def sample_shrinkage_weight(fbs_games_played: int) -> float:
+    """Shrink Opp Adj toward 0: 10% at 1 game -> 100% at 10+ games."""
+    n = min(max(fbs_games_played, OPP_ADJ_SHRINK_MIN_GAMES), OPP_ADJ_SHRINK_FULL_GAMES)
+    return 0.1 + 0.9 * (n - 1) / 9
+
+
+def normalize_opp_adj_margins(
+    raw_margins: Mapping[str, float],
+    games_played: Mapping[str, int],
+    preseason_margins: Mapping[str, float],
+    team_ids: Sequence[str],
+) -> Dict[str, float]:
+    """Z-score raw residuals, rescale to FPI-like spread, then shrink by sample size."""
+    result: Dict[str, float] = {}
+    pool: list[tuple[str, float]] = []
+
+    for team_id in team_ids:
+        n = games_played.get(team_id, 0)
+        if n <= 0:
+            fallback = preseason_margins.get(team_id)
+            result[team_id] = fallback if fallback is not None else 0.0
+            continue
+        pool.append((team_id, raw_margins[team_id]))
+
+    if len(pool) < 2:
+        for team_id, raw in pool:
+            shrink = sample_shrinkage_weight(games_played[team_id])
+            result[team_id] = shrink * raw
+        return result
+
+    raw_vals = [raw for _, raw in pool]
+    weights = [
+        sample_shrinkage_weight(games_played[team_id]) for team_id, _ in pool
+    ]
+    weight_sum = sum(weights)
+    mean = sum(weight * raw for weight, raw in zip(weights, raw_vals)) / weight_sum
+    variance = sum(
+        weight * (raw - mean) ** 2 for weight, raw in zip(weights, raw_vals)
+    ) / weight_sum
+    stdev = math.sqrt(variance)
+    if stdev < 1e-9:
+        for team_id, raw in pool:
+            shrink = sample_shrinkage_weight(games_played[team_id])
+            result[team_id] = shrink * raw
+        return result
+
+    for team_id, raw in pool:
+        z = (raw - mean) / stdev
+        scaled = z * OPP_ADJ_TARGET_STDEV
+        shrink = sample_shrinkage_weight(games_played[team_id])
+        result[team_id] = shrink * scaled
+    return result
 
 
 def game_residual(
@@ -147,12 +206,17 @@ def compute_opponent_adjusted_margins(
                 game_residual(game, team_id, stable, neutral_site=False)
             )
 
-    margins: Dict[str, float] = {}
+    raw_margins: Dict[str, float] = {}
     for team_id in team_ids:
         team_residuals = residuals[team_id]
         if not team_residuals:
-            fallback = preseason_margins.get(team_id)
-            margins[team_id] = fallback if fallback is not None else 0.0
+            raw_margins[team_id] = 0.0
             continue
-        margins[team_id] = sum(team_residuals) / len(team_residuals)
-    return margins
+        raw_margins[team_id] = sum(team_residuals) / len(team_residuals)
+
+    return normalize_opp_adj_margins(
+        raw_margins,
+        games_played,
+        preseason_margins,
+        team_ids,
+    )

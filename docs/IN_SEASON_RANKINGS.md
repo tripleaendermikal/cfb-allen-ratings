@@ -67,7 +67,10 @@ Opp Adj is the mean per-game **residual vs expectation**, using stabilized oppon
 2. **Stable opponent strength**: `anchor * preseason + (1 - anchor) * pilot_overall`, where `anchor` runs from 100% preseason at 0 FBS games to 40% preseason at 6+ games.
 3. **Per-game actual**: `(point_margin + 0.25 * yard_margin / 15.5) / 8`
 4. **Per-game expected**: `(team_strength - opp_strength + HFA) / 8` (+3 home / -3 away / 0 neutral)
-5. **Residual**: `actual - expected`; team Opp Adj = mean of residuals (no clamp). Teams with 0 FBS games use preseason.
+5. **Residual**: `actual - expected`; team Opp Adj = mean of raw residuals across FBS games.
+6. **Z-score**: raw residuals are z-scored across teams with ≥1 FBS game (0-game teams excluded from the pool).
+7. **Rescale**: multiply z-scores by 12 to match preseason-like spread.
+8. **Shrinkage**: shrink toward 0 by sample size — 10% weight at 1 game, 100% at 10+ games. Teams with 0 FBS games use preseason.
 
 Implementation: [`cfb_rating/opp_adjust.py`](cfb_rating/opp_adjust.py).
 
