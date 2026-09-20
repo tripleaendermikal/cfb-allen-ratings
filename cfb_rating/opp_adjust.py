@@ -14,6 +14,7 @@ YARDS_PER_POINT = 15.5
 OPP_ADJ_TARGET_STDEV = 12.0
 OPP_ADJ_SHRINK_MIN_GAMES = 1
 OPP_ADJ_SHRINK_FULL_GAMES = 10
+OPP_ADJ_PRESEASON_FADE_GAMES = 10
 
 
 def home_field_adjustment(neutral_site: bool, home_away: str) -> float:
@@ -86,13 +87,54 @@ def sample_shrinkage_weight(fbs_games_played: int) -> float:
     return 0.1 + 0.9 * (n - 1) / 9
 
 
+def global_preseason_weight(fbs_games_played: int) -> float:
+    """Preseason share for Opp Adj output: 100% at 0 games -> 0% at 10+ games."""
+    from cfb_rating.in_season import preseason_fade_weight
+
+    return preseason_fade_weight(
+        fbs_games_played,
+        fade_games=OPP_ADJ_PRESEASON_FADE_GAMES,
+    )
+
+
+def enforce_target_stdev(
+    values: Mapping[str, float],
+    *,
+    target: float = OPP_ADJ_TARGET_STDEV,
+) -> Dict[str, float]:
+    """Affine rescale so population stdev equals target and mean is 0."""
+    if len(values) < 2:
+        return dict(values)
+    vals = list(values.values())
+    mean = statistics.mean(vals)
+    stdev = statistics.pstdev(vals)
+    if stdev < 1e-9:
+        return {team_id: 0.0 for team_id in values}
+    return {
+        team_id: (value - mean) / stdev * target
+        for team_id, value in values.items()
+    }
+
+
+def _blend_with_preseason(
+    team_id: str,
+    shrunk_signal: float,
+    games_played: Mapping[str, int],
+    preseason_margins: Mapping[str, float],
+) -> float:
+    n = games_played[team_id]
+    w_pre = global_preseason_weight(n)
+    preseason = preseason_margins.get(team_id, 0.0)
+    return w_pre * preseason + (1.0 - w_pre) * shrunk_signal
+
+
 def normalize_opp_adj_margins(
     raw_margins: Mapping[str, float],
     games_played: Mapping[str, int],
     preseason_margins: Mapping[str, float],
     team_ids: Sequence[str],
 ) -> Dict[str, float]:
-    """Z-score raw residuals, rescale to FPI-like spread, then shrink by sample size."""
+    """Z-score, shrink, preseason blend, then enforce stdev 12 on played teams."""
     result: Dict[str, float] = {}
     pool: list[tuple[str, float]] = []
 
@@ -106,8 +148,10 @@ def normalize_opp_adj_margins(
 
     if len(pool) < 2:
         for team_id, raw in pool:
-            shrink = sample_shrinkage_weight(games_played[team_id])
-            result[team_id] = shrink * raw
+            shrunk = sample_shrinkage_weight(games_played[team_id]) * raw
+            result[team_id] = _blend_with_preseason(
+                team_id, shrunk, games_played, preseason_margins
+            )
         return result
 
     raw_vals = [raw for _, raw in pool]
@@ -121,16 +165,25 @@ def normalize_opp_adj_margins(
     ) / weight_sum
     stdev = math.sqrt(variance)
     if stdev < 1e-9:
+        blended: Dict[str, float] = {}
         for team_id, raw in pool:
-            shrink = sample_shrinkage_weight(games_played[team_id])
-            result[team_id] = shrink * raw
+            shrunk = sample_shrinkage_weight(games_played[team_id]) * raw
+            blended[team_id] = _blend_with_preseason(
+                team_id, shrunk, games_played, preseason_margins
+            )
+        result.update(enforce_target_stdev(blended))
         return result
 
+    blended: Dict[str, float] = {}
     for team_id, raw in pool:
         z = (raw - mean) / stdev
-        scaled = z * OPP_ADJ_TARGET_STDEV
-        shrink = sample_shrinkage_weight(games_played[team_id])
-        result[team_id] = shrink * scaled
+        signal = z * OPP_ADJ_TARGET_STDEV
+        shrunk = sample_shrinkage_weight(games_played[team_id]) * signal
+        blended[team_id] = _blend_with_preseason(
+            team_id, shrunk, games_played, preseason_margins
+        )
+
+    result.update(enforce_target_stdev(blended))
     return result
 
 

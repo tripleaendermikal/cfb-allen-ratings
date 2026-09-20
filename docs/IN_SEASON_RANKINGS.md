@@ -70,7 +70,9 @@ Opp Adj is the mean per-game **residual vs expectation**, using stabilized oppon
 5. **Residual**: `actual - expected`; team Opp Adj = mean of raw residuals across FBS games.
 6. **Z-score**: raw residuals are z-scored across teams with ≥1 FBS game (0-game teams excluded from the pool).
 7. **Rescale**: multiply z-scores by 12 to match preseason-like spread.
-8. **Shrinkage**: shrink toward 0 by sample size — 10% weight at 1 game, 100% at 10+ games. Teams with 0 FBS games use preseason.
+8. **Shrinkage**: shrink toward 0 by sample size — 10% weight at 1 game, 100% at 10+ games.
+9. **Global preseason blend**: `(10 - min(n, 10)) / 10` × preseason + remainder × shrunk signal.
+10. **Final enforcement**: affine rescale all ≥1-game teams to exactly stdev 12, mean 0. Teams with 0 FBS games use preseason.
 
 Implementation: [`cfb_rating/opp_adjust.py`](cfb_rating/opp_adjust.py).
 
