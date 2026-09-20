@@ -53,9 +53,23 @@ Primary sort and sim FPI base. Let `n` = FBS games played:
 | Games | Overall blend |
 |-------|----------------|
 | 0 | 100% preseason |
-| 1–4 | Preseason + Opp Adj + No Preseason (5% each per game, with early-season Some Preseason boost) |
+| 1–4 | Preseason + Opp Adj + No Preseason (5% each per game, with early-season Opp Adj boost) |
 | 5–9 | Preseason fades; Opp Adj drops out; No Preseason ramps to 100% |
 | 10+ | 100% No Preseason (algorithm margin) |
+
+### Opp Adj (middle component)
+
+Stored in CSV/JSON as `some_preseason_margin`. The viewer UI still labels this column **Some Preseason** until a future rename.
+
+Opp Adj is the mean per-game **residual vs expectation**, using stabilized opponent strength (not the noisy in-season algorithm rating):
+
+1. **Pilot overall** (circularity guard): `w_pre * preseason + w_algo * no_preseason` — omits Opp Adj from the blend used to rate opponents.
+2. **Stable opponent strength**: `anchor * preseason + (1 - anchor) * pilot_overall`, where `anchor` runs from 100% preseason at 0 FBS games to 40% preseason at 6+ games.
+3. **Per-game actual**: `(point_margin + 0.25 * yard_margin / 15.5) / 8`
+4. **Per-game expected**: `(team_strength - opp_strength + HFA) / 8` (+3 home / -3 away / 0 neutral)
+5. **Residual**: `actual - expected`; team Opp Adj = mean of residuals (no clamp). Teams with 0 FBS games use preseason.
+
+Implementation: [`cfb_rating/opp_adjust.py`](cfb_rating/opp_adjust.py).
 
 ## Preseason fade (Blended column)
 

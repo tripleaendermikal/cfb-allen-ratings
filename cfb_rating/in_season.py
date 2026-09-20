@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import csv
 import os
-import statistics
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Mapping, Optional, Sequence, Union
 
 from cfb_rating.margin_rating import compute_margin_ratings
+from cfb_rating.opp_adjust import compute_opponent_adjusted_margins
 from cfb_rating.rating_algorithm import GameRecord, compute_team_ratings
 from cfb_rating.season_data import DEFAULT_ESPN_TEAMS_CSV, load_fbs_team_ids
 
@@ -29,7 +29,6 @@ DEFAULT_OVERALL_ALGO_START_WEIGHT = 0.05
 DEFAULT_OVERALL_ALGO_GROWTH = 1.5
 DEFAULT_OVERALL_ALGO_FULL_GAMES = 9
 DEFAULT_OVERALL_SOME_PRESEASON_DOUBLE_THROUGH_GAMES = 6
-DEFAULT_SOME_PRESEASON_Z_SCALE = 0.05
 DEFAULT_MAX_WEEK = 14
 DEFAULT_ALGORITHM_MARGIN_MIN = -40.0
 DEFAULT_ALGORITHM_MARGIN_BASE_CEILING = 30.0
@@ -182,98 +181,6 @@ def preseason_fade_weight(
     return (fade_games - capped) / fade_games
 
 
-def global_preseason_weight(
-    through_week: int,
-    *,
-    fade_games: int = DEFAULT_FADE_GAMES,
-) -> float:
-    """League-wide preseason seed weight from season week (not per-team FBS games)."""
-    weeks_completed = max(through_week - 1, 0)
-    return preseason_fade_weight(weeks_completed, fade_games=fade_games)
-
-
-def preseason_margins_to_initial_ratings(
-    preseason_margins: Mapping[str, float],
-    team_ids: Sequence[str],
-    *,
-    z_scale: float = DEFAULT_SOME_PRESEASON_Z_SCALE,
-) -> Dict[str, float]:
-    """Map preseason margins to 0-1 ratings centered at 0.5 via z-score."""
-    margins = [preseason_margins[team_id] for team_id in team_ids]
-    mu = statistics.mean(margins)
-    sigma = statistics.pstdev(margins) or 1.0
-    raw = {
-        team_id: 0.5 + z_scale * ((preseason_margins[team_id] - mu) / sigma)
-        for team_id in team_ids
-    }
-    mean_raw = statistics.mean(raw.values())
-    factor = 0.5 / mean_raw if mean_raw else 1.0
-    return {team_id: rating * factor for team_id, rating in raw.items()}
-
-
-def blended_some_preseason_initial_ratings(
-    preseason_margins: Mapping[str, float],
-    team_ids: Sequence[str],
-    *,
-    preseason_weight: float,
-    z_scale: float = DEFAULT_SOME_PRESEASON_Z_SCALE,
-) -> Dict[str, float]:
-    """Same global preseason blend for every team's algorithm starting rating."""
-    pre_ratings = preseason_margins_to_initial_ratings(
-        preseason_margins,
-        team_ids,
-        z_scale=z_scale,
-    )
-    return {
-        team_id: preseason_weight * pre_ratings[team_id] + (1.0 - preseason_weight) * 0.5
-        for team_id in team_ids
-    }
-
-
-def compute_some_preseason_margins(
-    games: Sequence[GameRecord],
-    team_ids: Sequence[str],
-    preseason_margins: Mapping[str, float],
-    games_played: Mapping[str, int],
-    *,
-    through_week: int,
-    fade_games: int = DEFAULT_FADE_GAMES,
-    z_scale: float = DEFAULT_SOME_PRESEASON_Z_SCALE,
-    iterations: int = 1000,
-) -> Dict[str, float]:
-    """Some Preseason: global preseason-seeded algorithm on FBS-vs-FBS games only."""
-    preseason_weight = global_preseason_weight(through_week, fade_games=fade_games)
-    initial = blended_some_preseason_initial_ratings(
-        preseason_margins,
-        team_ids,
-        preseason_weight=preseason_weight,
-        z_scale=z_scale,
-    )
-    ratings = compute_team_ratings(
-        games,
-        team_ids=team_ids,
-        initial_ratings=initial,
-        iterations=iterations,
-    )
-    algo_margins = {
-        team_id: clamp_algorithm_margin(
-            result.margin_rating,
-            fbs_games_played=games_played.get(team_id, 0),
-        )
-        for team_id, result in compute_margin_ratings(ratings).items()
-    }
-    margins: Dict[str, float] = {}
-    for team_id in team_ids:
-        if games_played.get(team_id, 0) == 0:
-            margin = preseason_margins.get(team_id)
-            if margin is None:
-                margin = algo_margins[team_id]
-            margins[team_id] = margin
-        else:
-            margins[team_id] = algo_margins[team_id]
-    return margins
-
-
 def blend_in_season_margins(
     preseason_margins: Mapping[str, float],
     algorithm_margins: Mapping[str, float],
@@ -298,23 +205,6 @@ def blend_in_season_margins(
             preseason_weight * preseason_margin + algorithm_weight * algorithm_margin
         )
     return blended
-
-
-def avg_opponent_blended_played(
-    team_id: str,
-    week_games: Sequence[GameRecord],
-    blended_margins: Mapping[str, float],
-) -> float:
-    """Mean blended margin of FBS opponents faced in completed games through the week."""
-    opp_ids: list[str] = []
-    for game in week_games:
-        if game.home_team_id == team_id:
-            opp_ids.append(game.away_team_id)
-        elif game.away_team_id == team_id:
-            opp_ids.append(game.home_team_id)
-    if not opp_ids:
-        return 0.0
-    return sum(blended_margins[oid] for oid in opp_ids) / len(opp_ids)
 
 
 def overall_component_weights(games_played: int) -> tuple[float, float, float]:
@@ -431,14 +321,12 @@ def compute_in_season_rankings_for_week(
         games_played,
         fade_games=fade_games,
     )
-    some_preseason_margins = compute_some_preseason_margins(
+    some_preseason_margins = compute_opponent_adjusted_margins(
         week_games,
         team_ids,
         preseason_margins,
+        algorithm_margins,
         games_played,
-        through_week=through_week,
-        fade_games=fade_games,
-        iterations=iterations,
     )
     overall_margins = compute_overall_margins(
         preseason_margins,
