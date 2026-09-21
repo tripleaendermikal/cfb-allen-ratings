@@ -7,10 +7,12 @@ from cfb_rating.constants import (
     POINTS_EXPONENT,
     POINTS_INTERCEPT,
     POINTS_LN_COEFF,
+    POINTS_MULTIPLIER,
     POINTS_WEIGHT,
     YARDS_EXPONENT,
     YARDS_INTERCEPT,
     YARDS_LN_COEFF,
+    YARDS_MULTIPLIER,
     YARDS_WEIGHT,
 )
 
@@ -33,16 +35,18 @@ def evaluate_points_margin(home_score: float, away_score: float) -> PointsMargin
     1. total_score = home_score + away_score
     2. pace = points_ln_coeff * ln(total_score) - points_intercept
     3. adj_margin = (home_score - away_score) / pace
-    4. home_point_score_ratio = exp(points_exponent * adj_margin * 2)
-       / (1 + exp(points_exponent * adj_margin * 2))
-    5. away_point_score_ratio = 1 - home_point_score_ratio
-    6. Multiply both ratios by points_weight
+    4. scaled_margin = adj_margin * points_multiplier
+    5. home_point_score_ratio = exp(points_exponent * scaled_margin * 2)
+       / (1 + exp(points_exponent * scaled_margin * 2))
+    6. away_point_score_ratio = 1 - home_point_score_ratio
+    7. Multiply both ratios by points_weight
     """
     total_score = home_score + away_score
     pace = POINTS_LN_COEFF * log(total_score) - POINTS_INTERCEPT
     adj_margin = (home_score - away_score) / pace
+    scaled_margin = adj_margin * POINTS_MULTIPLIER
 
-    exp_term = exp(POINTS_EXPONENT * adj_margin * 2)
+    exp_term = exp(POINTS_EXPONENT * scaled_margin * 2)
     home_point_score_ratio = exp_term / (1 + exp_term)
     away_point_score_ratio = 1 - home_point_score_ratio
 
@@ -75,16 +79,18 @@ def evaluate_yards_margin(home_yards: float, away_yards: float) -> YardsMarginRe
     1. total_yards = home_yards + away_yards
     2. pace_yards = yards_ln_coeff * ln(total_yards) - yards_intercept
     3. adj_yards_margin = (home_yards - away_yards) / pace_yards
-    4. home_yards_score_ratio = exp(yards_exponent * adj_yards_margin * 2)
-       / (1 + exp(yards_exponent * adj_yards_margin * 2))
-    5. away_yards_score_ratio = 1 - home_yards_score_ratio
-    6. Multiply both ratios by yards_weight
+    4. scaled_yards_margin = adj_yards_margin * yards_multiplier
+    5. home_yards_score_ratio = exp(yards_exponent * scaled_yards_margin * 2)
+       / (1 + exp(yards_exponent * scaled_yards_margin * 2))
+    6. away_yards_score_ratio = 1 - home_yards_score_ratio
+    7. Multiply both ratios by yards_weight
     """
     total_yards = home_yards + away_yards
     pace_yards = YARDS_LN_COEFF * log(total_yards) - YARDS_INTERCEPT
     adj_yards_margin = (home_yards - away_yards) / pace_yards
+    scaled_yards_margin = adj_yards_margin * YARDS_MULTIPLIER
 
-    exp_term = exp(YARDS_EXPONENT * adj_yards_margin * 2)
+    exp_term = exp(YARDS_EXPONENT * scaled_yards_margin * 2)
     home_yards_score_ratio = exp_term / (1 + exp_term)
     away_yards_score_ratio = 1 - home_yards_score_ratio
 
