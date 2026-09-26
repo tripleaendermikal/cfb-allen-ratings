@@ -399,6 +399,18 @@ class DataStore:
             row["display_rank"] = idx
         return rows
 
+    def team_row_for_week(self, team_id: str, week: int | None = None) -> dict:
+        """Leaderboard row for one team, merged with weekly rankings for display."""
+        if week is None:
+            default_week = self.meta.get("current_week") or (
+                self.ranking_weeks[-1] if self.ranking_weeks else 0
+            )
+            week = int(default_week)
+        for row in self.leaderboard_for_week(week, ranking_mode="overall"):
+            if row.get("team_id") == team_id:
+                return row
+        return dict(self.lb_by_id.get(team_id, {}))
+
     @property
     def ranking_weeks(self) -> list[int]:
         weeks = self.rankings.get("weeks") or []
@@ -917,11 +929,13 @@ def create_app() -> Flask:
     @app.route("/team/<team_id>")
     def team_detail(team_id: str):
         team = store.teams_by_id.get(team_id)
-        lb = store.lb_by_id.get(team_id)
-        if not team and not lb:
+        lb_base = store.lb_by_id.get(team_id)
+        if not team and not lb_base:
             abort(404)
         team = team or {}
-        lb = lb or {}
+        lb_base = lb_base or {}
+        lb = store.team_row_for_week(team_id) or lb_base
+        display_rank = lb.get("display_rank") or lb.get("rank")
         merged = {
             "team_id": team_id,
             "team_name": team.get("team_name") or lb.get("team_name", team_id),
@@ -929,18 +943,18 @@ def create_app() -> Flask:
             "avg_wins": team.get("avg_wins"),
             "forecasted_wins": lb.get("forecasted_wins"),
             "win_histogram": team.get("win_histogram", {}),
-            "title_odds_pct": lb.get("title_odds_pct", 0),
-            "conf_champ_odds_pct": lb.get("conf_champ_odds_pct", 0),
-            "eligibility_pct": lb.get("eligibility_pct", 0),
-            "conf_champ_appearances": lb.get("conf_champ_appearances", 0),
-            "baseline_fpi": lb.get("baseline_fpi"),
-            "sos": lb.get("sos") or team.get("sos"),
-            "rank": lb.get("rank"),
-            "display_rank": lb.get("rank"),
+            "title_odds_pct": lb_base.get("title_odds_pct", 0),
+            "conf_champ_odds_pct": lb_base.get("conf_champ_odds_pct", 0),
+            "eligibility_pct": lb_base.get("eligibility_pct", 0),
+            "conf_champ_appearances": lb_base.get("conf_champ_appearances", 0),
+            "baseline_fpi": lb_base.get("baseline_fpi"),
+            "sos": lb.get("sos") or team.get("sos") or lb_base.get("sos"),
+            "rank": display_rank,
+            "display_rank": display_rank,
             "blended_margin": lb.get("blended_margin"),
             "some_preseason_margin": lb.get("some_preseason_margin")
             or lb.get("opp_adj_margin"),
-            "overall_margin": resolve_overall_margin(lb, lb),
+            "overall_margin": lb.get("overall_margin"),
             "algorithm_margin": lb.get("algorithm_margin"),
             "rank_delta": lb.get("rank_delta", 0),
             "record": lb.get("record", "0-0"),
@@ -986,10 +1000,11 @@ def create_app() -> Flask:
         invalid_ids = []
         for i, tid in enumerate(ids):
             team = store.teams_by_id.get(tid)
-            lb = store.lb_by_id.get(tid, {})
+            lb_base = store.lb_by_id.get(tid, {})
             if not team or not is_fbs_team(team):
                 invalid_ids.append(tid)
                 continue
+            lb = store.team_row_for_week(tid) or lb_base
             theme = build_team_theme(team, team.get("conference", ""))
             hist = team.get("win_histogram", {})
             selected.append(
@@ -999,14 +1014,14 @@ def create_app() -> Flask:
                     "conference": team.get("conference", ""),
                     "avg_wins": team.get("avg_wins"),
                     "forecasted_wins": lb.get("forecasted_wins") or team.get("avg_wins"),
-                    "title_odds_pct": lb.get("title_odds_pct", 0),
-                    "conf_champ_odds_pct": lb.get("conf_champ_odds_pct", 0),
-                    "eligibility_pct": lb.get("eligibility_pct", 0),
-                    "rank": lb.get("rank"),
+                    "title_odds_pct": lb_base.get("title_odds_pct", 0),
+                    "conf_champ_odds_pct": lb_base.get("conf_champ_odds_pct", 0),
+                    "eligibility_pct": lb_base.get("eligibility_pct", 0),
+                    "rank": lb.get("display_rank") or lb.get("rank"),
                     "blended_margin": lb.get("blended_margin"),
                     "some_preseason_margin": lb.get("some_preseason_margin")
                     or lb.get("opp_adj_margin"),
-                    "overall_margin": resolve_overall_margin(lb, lb),
+                    "overall_margin": lb.get("overall_margin"),
                     "algorithm_margin": lb.get("algorithm_margin"),
                     "record": lb.get("record", "0-0"),
                 }
