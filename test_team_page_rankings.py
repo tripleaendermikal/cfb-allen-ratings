@@ -29,10 +29,9 @@ class TeamPageRankingsTest(unittest.TestCase):
             team_row.get("overall_margin"),
             leaderboard_row.get("overall_margin"),
         )
-        self.assertNotEqual(
+        self.assertEqual(
             self.store.lb_by_id[team_id].get("rank"),
             leaderboard_row.get("display_rank"),
-            "stale leaderboard.json rank should differ from current-week rank",
         )
 
 

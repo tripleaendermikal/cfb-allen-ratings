@@ -10,10 +10,14 @@ From the repo root:
 python update_in_season_weekly.py
 ```
 
+**Always run the full pipeline** (default, no skip flags). Do not export or commit
+`rankings.json` alone — `leaderboard.json`, sim outputs, and team pages go stale
+and ranks will disagree across the site.
+
 | Flag | Effect |
 |------|--------|
 | `--skip-refresh` | Skip ESPN score refresh |
-| `--skip-sims` | Skip Monte Carlo sims — Fcst Wins / Playoff % / Title % stay stale |
+| `--skip-sims` | Skip Monte Carlo sims — **do not use for production updates**; Fcst Wins / Playoff % / Title % and leaderboard ranks stay stale |
 | `--simulations N` | Monte Carlo count (default **1000**) |
 
 ## Pipeline order
