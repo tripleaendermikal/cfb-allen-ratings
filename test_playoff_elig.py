@@ -14,6 +14,7 @@ from cfb_playoff_elig import (
     GROUP_CONFERENCES,
     NOTRE_DAME_NAME,
     apply_g6_autobid_col,
+    apply_notre_dame_rule_col,
     compute_playoff_eligibility,
     eligibility_count,
     enforce_sec_big_ten_floor,
@@ -106,7 +107,24 @@ class TestPlayoffEligibility(unittest.TestCase):
         )
         self.assertEqual(eligibility_count(out, "sim_0001"), 12)
 
-    def test_notre_dame_ten_wins_gets_bid(self):
+    def test_notre_dame_auto_bid_threshold(self):
+        source = [
+            {
+                "team_id": "87",
+                "team_name": NOTRE_DAME_NAME,
+                "conference": "FBS Indep.",
+                "sim_0001": "10",
+            }
+        ]
+        output = [{"team_id": "87", "sim_0001": 0}]
+        apply_notre_dame_rule_col(output, source, "sim_0001")
+        self.assertEqual(int(output[0]["sim_0001"]), 0)
+
+        source[0]["sim_0001"] = "11"
+        apply_notre_dame_rule_col(output, source, "sim_0001")
+        self.assertEqual(int(output[0]["sim_0001"]), 1)
+
+    def test_notre_dame_eleven_wins_gets_bid(self):
         teams = [
             {"team_id": "1", "team_name": "A", "conference": "SEC"},
             {
@@ -130,7 +148,7 @@ class TestPlayoffEligibility(unittest.TestCase):
         fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
         wins = {t["team_id"]: 7 + (int(t["team_id"]) % 5) for t in teams}
         wins["1"] = 12
-        wins["87"] = 10
+        wins["87"] = 11
         rows = make_rows(teams, wins, fieldnames)
         champs = {
             "sim_0001": {
@@ -146,6 +164,59 @@ class TestPlayoffEligibility(unittest.TestCase):
         out = compute_playoff_eligibility(rows, fieldnames, fpi, champs, sos, g6_pts)
         nd_row = next(r for r in out if r["team_name"] == NOTRE_DAME_NAME)
         self.assertEqual(int(nd_row["sim_0001"]), 1)
+
+    def test_notre_dame_ten_wins_fills_acc_big12_tier(self):
+        """10-win Notre Dame enters via the ACC/Big 12 win-tier fill."""
+        source = [
+            {
+                "team_id": "87",
+                "team_name": NOTRE_DAME_NAME,
+                "conference": "FBS Indep.",
+                "sim_0001": "10",
+            },
+            {
+                "team_id": "1",
+                "team_name": "ACC Team",
+                "conference": "ACC",
+                "sim_0001": "11",
+            },
+        ]
+        output = [
+            {"team_id": "87", "sim_0001": 0},
+            {"team_id": "1", "sim_0001": 1},
+        ]
+        sos = {"87": 5.0, "1": 0.0}
+        fill_win_tiers_col(output, source, "sim_0001", sos)
+        self.assertEqual(int(output[0]["sim_0001"]), 1)
+
+    def test_trim_notre_dame_ten_win(self):
+        """Category 3 removes 10-win Notre Dame when trimming overflow."""
+        source = [
+            {
+                "team_id": "87",
+                "team_name": NOTRE_DAME_NAME,
+                "conference": "FBS Indep.",
+                "sim_0001": "10",
+            },
+        ]
+        output = [{"team_id": "87", "sim_0001": 1}]
+        for i in range(1, 14):
+            source.append(
+                {
+                    "team_id": str(i),
+                    "team_name": f"F{i}",
+                    "conference": "SEC",
+                    "sim_0001": "11",
+                }
+            )
+            output.append({"team_id": str(i), "sim_0001": 1})
+        protected = set()
+        champs = set()
+        sos = {"87": 1.0}
+        sos.update({str(i): 0.0 for i in range(1, 14)})
+        trim_overflow_col(output, source, "sim_0001", sos, champs, protected)
+        self.assertEqual(eligibility_count(output, "sim_0001"), 12)
+        self.assertEqual(int(output[0]["sim_0001"]), 0)
 
     def test_sos_tiebreak_sec_rule4(self):
         """Higher SOS wins when SEC wins are tied for rule 4 pool."""
@@ -266,8 +337,8 @@ class TestG6PlayoffPoints(unittest.TestCase):
         pts = points_for_team_sim(
             "100", "American", games, "sim_0001", conf_by_team, champs
         )
-        # 2 wins + 1 non-G6 win (not UConn) + conf champ + American bonus
-        self.assertEqual(pts, 5)
+        # 2 wins + 1 non-G6 win (not UConn) + conf champ
+        self.assertEqual(pts, 4)
 
     def test_uconn_win_no_extra_bonus(self):
         conf_by_team = {"100": "MAC", "41": "FBS Indep."}
@@ -382,8 +453,8 @@ class TestG6PlayoffPoints(unittest.TestCase):
             champs = {"sim_0001": {"American": "100"}}
             _, rows = compute_g6_playoff_points(games_path, conf_path, champs)
             row = next(r for r in rows if r["team_id"] == "100")
-            # 1 win + 1 non-G6 win + conf champ + American bonus
-            self.assertEqual(int(row["sim_0001"]), 4)
+            # 1 win + 1 non-G6 win + conf champ
+            self.assertEqual(int(row["sim_0001"]), 3)
 
 
 if __name__ == "__main__":

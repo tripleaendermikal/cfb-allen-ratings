@@ -175,10 +175,14 @@ def notre_dame_index(source_rows):
     return None
 
 
+def is_acc_big12_or_notre_dame(src):
+    return src["conference"] in ACC_BIG_12 or src["team_name"] == NOTRE_DAME_NAME
+
+
 def apply_notre_dame_rule_col(output_rows, source_rows, col):
-    """Rule 2: Notre Dame with >= 10 wins."""
+    """Rule 2: Notre Dame with >= 11 wins."""
     for i, src in enumerate(source_rows):
-        if src["team_name"] == NOTRE_DAME_NAME and int(src[col]) >= 10:
+        if src["team_name"] == NOTRE_DAME_NAME and int(src[col]) >= 11:
             output_rows[i][col] = 1
 
 
@@ -281,6 +285,8 @@ def tier_matches(src, col, tier_conf, min_wins):
     if tier_conf is None:
         return True
     if isinstance(tier_conf, set):
+        if tier_conf == ACC_BIG_12:
+            return is_acc_big12_or_notre_dame(src)
         return src["conference"] in tier_conf
     return src["conference"] == tier_conf
 
@@ -400,7 +406,7 @@ def trim_overflow_col(
         if removed:
             continue
 
-        # 3. ACC or Big 12 non-champion with exactly 10 wins
+        # 3. ACC or Big 12 (or Notre Dame) non-champion with exactly 10 wins
         pool = removable_for_trim(
             output_rows,
             source_rows,
@@ -408,7 +414,7 @@ def trim_overflow_col(
             [
                 i
                 for i in eligible
-                if conf(i) in ACC_BIG_12
+                if is_acc_big12_or_notre_dame(source_rows[i])
                 and not is_p4_champion(i)
                 and wins(i) == 10
             ],
@@ -463,12 +469,12 @@ def trim_overflow_col(
 def rule_123_protected_indices(
     output_rows, source_rows, col, conf_champions_by_sim, sim_fpi_by_team_id
 ):
-    """Indices locked by rules 1-3 (P4 champs, ND >=10, G6 autobid)."""
+    """Indices locked by rules 1-3 (P4 champs, ND >=11, G6 autobid)."""
     protected = set(
         power_four_conf_champion_indices(source_rows, col, conf_champions_by_sim)
     )
     nd_i = notre_dame_index(source_rows)
-    if nd_i is not None and int(source_rows[nd_i][col]) >= 10:
+    if nd_i is not None and int(source_rows[nd_i][col]) >= 11:
         protected.add(nd_i)
     g6_i = g6_autobid_index(output_rows, source_rows, col)
     if g6_i is not None:
@@ -493,7 +499,7 @@ def compute_column_eligibility(
         output_rows, source_rows, col, conf_champions_by_sim
     )
 
-    # Rule 2: Notre Dame >= 10 wins
+    # Rule 2: Notre Dame >= 11 wins
     apply_notre_dame_rule_col(output_rows, source_rows, col)
 
     # Rule 3: Group of 6 autobid (playoff points)

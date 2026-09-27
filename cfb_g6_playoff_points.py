@@ -11,7 +11,6 @@ from cfb_playoff_elig import GROUP_CONFERENCES, sim_columns
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 UCONN_TEAM_ID = "41"
-CONFERENCE_BONUS = {"American", "Pac-12"}
 
 
 def load_conf_by_team_id(path: Path) -> dict[str, str]:
@@ -48,8 +47,6 @@ def points_for_team_sim(
                 points += 1
 
     if conf_champions_by_sim.get(col, {}).get(conference) == team_id:
-        points += 1
-    if conference in CONFERENCE_BONUS:
         points += 1
     return points
 
