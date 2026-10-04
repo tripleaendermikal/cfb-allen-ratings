@@ -15,6 +15,14 @@ from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
+from pac12_week13 import (
+    FLEX_FLAG_COL,
+    FLEX_FLAG_VALUE,
+    PAC12_FLEX_OPPONENT_DISPLAY_NAME,
+    PAC12_FLEX_OPPONENT_ID,
+    PAC12_FLEX_OPPONENT_NAME,
+)
+
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 GROUP_OF_6 = {"American", "Pac-12", "Sun Belt", "CUSA", "Mountain West", "MAC"}
 FBS_INDEP = "FBS Indep."
@@ -970,6 +978,33 @@ def merge_team_sos(
             row["sos"] = sos_by_id[tid]
 
 
+def is_pac12_flex_schedule_row(row: dict) -> bool:
+    return (row.get(FLEX_FLAG_COL) or "").strip() == FLEX_FLAG_VALUE
+
+
+def is_pac12_placeholder_team_row(row: dict) -> bool:
+    return (row.get("team_id") or "").strip() == PAC12_FLEX_OPPONENT_ID
+
+
+def flex_opponent_display_name(opponent_id: str, opponent_name: str) -> str:
+    if (opponent_id or "").strip() == PAC12_FLEX_OPPONENT_ID:
+        return PAC12_FLEX_OPPONENT_DISPLAY_NAME
+    if (opponent_name or "").strip() == PAC12_FLEX_OPPONENT_NAME:
+        return PAC12_FLEX_OPPONENT_DISPLAY_NAME
+    return opponent_name
+
+
+def schedule_row_dedupe_rank(row: dict) -> tuple[int, int]:
+    """Lower sorts first (preferred canonical row per game_id)."""
+    if is_pac12_placeholder_team_row(row):
+        return (2, 0)
+    if is_pac12_flex_schedule_row(row):
+        return (0, 0)
+    if row.get("home_away") == "home":
+        return (1, 0)
+    return (1, 1)
+
+
 def build_schedule(
     game_rows: list[dict],
     sim_cols: list[str],
@@ -988,6 +1023,10 @@ def build_schedule(
             margin += home_field_adjustment(
                 row.get("neutral_site", ""), row.get("home_away", "")
             )
+        opp_id = row.get("opponent_id", "")
+        opp_name = row.get("opponent_name", "")
+        if is_pac12_flex_schedule_row(row):
+            opp_name = flex_opponent_display_name(opp_id, opp_name)
         full_schedule.append(
             {
                 "game_id": gid,
@@ -999,26 +1038,29 @@ def build_schedule(
                 "conference": conf_by_id.get(tid, ""),
                 "home_away": row.get("home_away", ""),
                 "neutral_site": row.get("neutral_site", ""),
-                "opponent_id": row.get("opponent_id", ""),
-                "opponent_name": row.get("opponent_name", ""),
+                "opponent_id": opp_id,
+                "opponent_name": opp_name,
                 "team_fpi": _optional_float(row.get("team_fpi")),
                 "opponent_fpi": _optional_float(row.get("opponent_fpi")),
                 "win_pct": win_pct,
                 "avg_margin": round(margin, 3) if margin is not None else None,
+                FLEX_FLAG_COL: (row.get(FLEX_FLAG_COL) or "").strip(),
             }
         )
     return full_schedule, dedupe_schedule(full_schedule)
 
 
 def dedupe_schedule(schedule: list[dict]) -> list[dict]:
-    """One row per game_id; prefer the home team's perspective."""
+    """One row per game_id; prefer real Pac-12 flex rows over placeholder mirrors."""
     by_game: dict[str, dict] = {}
     for row in schedule:
         gid = row.get("game_id", "")
         if not gid:
             continue
         existing = by_game.get(gid)
-        if existing is None or row.get("home_away") == "home":
+        if existing is None or schedule_row_dedupe_rank(row) < schedule_row_dedupe_rank(
+            existing
+        ):
             by_game[gid] = row
     return sorted(
         by_game.values(),
@@ -1351,10 +1393,38 @@ def build_games(
         gid = row.get("game_id", "")
         if not gid:
             continue
-        home_id = row.get("team_id", "")
-        away_id = row.get("opponent_id", "")
-        home_conf = conf_by_id.get(home_id, row.get("conference", ""))
-        away_conf = conf_by_id.get(away_id, "")
+        team_id = row.get("team_id", "")
+        opp_id = row.get("opponent_id", "")
+        team_wp = float(row.get("win_pct") or 0)
+        is_flex = is_pac12_flex_schedule_row(row)
+
+        if row.get("home_away") == "away":
+            home_id, away_id = opp_id, team_id
+            home_name = flex_opponent_display_name(
+                opp_id, row.get("opponent_name", "")
+            )
+            away_name = row.get("team_name", "")
+            home_fpi = row.get("opponent_fpi")
+            away_fpi = row.get("team_fpi")
+            home_conf = conf_by_id.get(home_id, "")
+            away_conf = conf_by_id.get(away_id, row.get("conference", ""))
+            home_wp = round(100.0 - team_wp, 2)
+            avg_margin = row.get("avg_margin")
+            if avg_margin is not None:
+                avg_margin = round(-float(avg_margin), 3)
+        else:
+            home_id, away_id = team_id, opp_id
+            home_name = row.get("team_name", "")
+            away_name = flex_opponent_display_name(
+                opp_id, row.get("opponent_name", "")
+            )
+            home_fpi = row.get("team_fpi")
+            away_fpi = row.get("opponent_fpi")
+            home_conf = conf_by_id.get(home_id, row.get("conference", ""))
+            away_conf = conf_by_id.get(away_id, "")
+            home_wp = team_wp
+            avg_margin = row.get("avg_margin")
+
         is_conf = (
             bool(home_conf)
             and bool(away_conf)
@@ -1364,6 +1434,11 @@ def build_games(
         neutral = row.get("neutral_site")
         is_neutral = neutral in ("True", True, "true")
         home_margins = margin_lists.get((gid, home_id), [])
+        if not home_margins and home_id == PAC12_FLEX_OPPONENT_ID:
+            team_margins = margin_lists.get((gid, away_id), [])
+            home_margins = [-m for m in team_margins]
+        elif not home_margins and away_id == PAC12_FLEX_OPPONENT_ID:
+            home_margins = margin_lists.get((gid, home_id), [])
         hfa = home_field_adjustment("true" if is_neutral else "", "home")
         adjusted_home_margins = [m + hfa for m in home_margins]
         by_id[gid] = {
@@ -1372,16 +1447,17 @@ def build_games(
             "week": row.get("week"),
             "neutral_site": neutral in ("True", True, "true"),
             "home_team_id": home_id,
-            "home_team_name": row.get("team_name", ""),
+            "home_team_name": home_name,
             "home_conference": home_conf,
-            "home_fpi": row.get("team_fpi"),
+            "home_fpi": home_fpi,
             "away_team_id": away_id,
-            "away_team_name": row.get("opponent_name", ""),
+            "away_team_name": away_name,
             "away_conference": away_conf,
-            "away_fpi": row.get("opponent_fpi"),
-            "home_win_pct": row.get("win_pct"),
-            "avg_margin": row.get("avg_margin"),
+            "away_fpi": away_fpi,
+            "home_win_pct": home_wp,
+            "avg_margin": avg_margin,
             "is_conference_game": is_conf,
+            "is_pac12_flex": is_flex,
             "margin_histogram": build_margin_histogram(adjusted_home_margins),
         }
     return by_id
