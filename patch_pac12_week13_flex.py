@@ -64,8 +64,9 @@ def should_remove_row(row: dict[str, str]) -> bool:
     week = (row.get("week") or "").strip()
     tid = (row.get("team_id") or "").strip()
     oid = (row.get("opponent_id") or "").strip()
-    if week == WEEK and is_pac12_team(tid) and oid == TBD_ID:
-        return True
+    if week == WEEK and is_pac12_team(tid) and not is_flex_row(row):
+        if oid in (TBD_ID, PAC12_FLEX_OPPONENT_ID):
+            return True
     if week == WEEK and tid == TBD_ID and is_pac12_team(oid):
         return True
     return False

@@ -18,10 +18,6 @@ from collections import defaultdict
 from pathlib import Path
 
 SIM_COL_PATTERN = re.compile(r"^sim_(\d+)$")
-MAX_WINS = 12
-
-# Teams with fewer than 12 scheduled games may get a per-sim win bonus (playoff eligibility).
-WIN_BONUS_BY_TEAM_ID: dict[str, int] = {}
 
 
 def load_conference_lookup(path: Path) -> tuple[dict[str, str], dict[str, str]]:
@@ -147,10 +143,6 @@ def main() -> int:
         }
         for sc in sim_cols:
             r[sc] = str(wins[tid][sc])
-        bonus = WIN_BONUS_BY_TEAM_ID.get(tid, 0)
-        if bonus:
-            for sc in sim_cols:
-                r[sc] = str(min(MAX_WINS, int(r[sc]) + bonus))
         out_rows.append(r)
 
     with out_path.open("w", newline="", encoding="utf-8-sig") as f:
