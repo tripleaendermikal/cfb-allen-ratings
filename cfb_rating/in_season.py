@@ -35,8 +35,9 @@ DEFAULT_ALGORITHM_MARGIN_BASE_CEILING = 30.0
 
 
 def algorithm_margin_ceiling(fbs_games_played: int) -> float:
-    """No Preseason ceiling: 30 + FBS games played by the team."""
-    return DEFAULT_ALGORITHM_MARGIN_BASE_CEILING + max(fbs_games_played, 0)
+    """No Preseason ceiling: 30 + 2 × FBS games played by the team."""
+    games = max(fbs_games_played, 0)
+    return DEFAULT_ALGORITHM_MARGIN_BASE_CEILING + 2 * games
 
 
 def clamp_algorithm_margin(
