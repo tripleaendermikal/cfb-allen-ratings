@@ -23,8 +23,12 @@ class MarginRatingResult:
 
 
 def compute_r(rating: float, median: float = MEDIAN_RATING, scale: float = R_SCALE) -> float:
-    """R = (rating - median) / scale."""
-    return (rating - median) / scale
+    """Pre-standardization R from mean game score: (avg - 0.5) / (avg + 0.5)."""
+    _ = scale  # retained for API compatibility
+    denominator = rating + median
+    if abs(denominator) < 1e-12:
+        return 0.0
+    return (rating - median) / denominator
 
 
 def _standard_deviation(values: Iterable[float]) -> float:
@@ -45,11 +49,12 @@ def compute_margin_ratings(
 ) -> Dict[str, MarginRatingResult]:
     """Convert team ratings to expected margin vs a median team.
 
-    1. R = (rating - 0.5) / 0.5
+    1. R = (rating - 0.5) / (rating + 0.5)
     2. RS = R / std_dev(R) across all teams
     3. margin_rating = RS * 14
     """
-    r_values = {team_id: compute_r(rating, median, scale) for team_id, rating in ratings.items()}
+    _ = (median, scale)  # retained for API compatibility
+    r_values = {team_id: compute_r(rating) for team_id, rating in ratings.items()}
     r_std = _standard_deviation(r_values.values())
 
     results: Dict[str, MarginRatingResult] = {}
