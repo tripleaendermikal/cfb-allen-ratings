@@ -1510,6 +1510,42 @@ def build_conf_championship(
     }
 
 
+def build_sim_records_by_team_col(
+    records_rows: list[dict],
+    sim_cols: list[str],
+    game_rows: list[dict],
+) -> dict[str, dict[str, tuple[int, int]]]:
+    """Per team_id and sim column: (wins, losses) from sim results."""
+    from collections import defaultdict
+
+    games_played: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for row in game_rows:
+        tid = (row.get("team_id") or "").strip()
+        if not tid:
+            continue
+        for col in sim_cols:
+            v = (row.get(col) or "").strip()
+            if v in ("0", "1"):
+                games_played[tid][col] += 1
+
+    by_team: dict[str, dict[str, tuple[int, int]]] = {}
+    for row in records_rows:
+        tid = (row.get("team_id") or "").strip()
+        if not tid:
+            continue
+        by_team[tid] = {}
+        for col in sim_cols:
+            wins = int((row.get(col) or "0").strip() or 0)
+            gp = games_played[tid].get(col, 0)
+            losses = max(gp - wins, 0) if gp else 0
+            by_team[tid][col] = (wins, losses)
+    return by_team
+
+
+def sim_record_string(wins: int, losses: int) -> str:
+    return f"{wins}-{losses}"
+
+
 def build_brackets(
     eligibility: dict,
     sim_cols: list[str],
@@ -1522,6 +1558,7 @@ def build_brackets(
     conf_champions_by_sim: dict,
     h2h_wins_by_col,
     h2h_games_by_col,
+    game_rows: list[dict] | None = None,
 ) -> dict:
     """Per-sim playoff seeds/brackets and team-centric summary."""
     sim_fpi_by_col = load_sim_fpi_by_team(SOURCES["games_fpi"])
@@ -1532,6 +1569,11 @@ def build_brackets(
     seed_sums: dict[str, float] = {}
     seed_counts: dict[str, int] = {}
     r1_seeds = [[5, 12], [6, 11], [7, 10], [8, 9]]
+    sim_records = (
+        build_sim_records_by_team_col(records_rows, sim_cols, game_rows or [])
+        if game_rows
+        else {}
+    )
 
     for sim_idx, col in enumerate(sim_cols):
         field_ids = fields[sim_idx] if sim_idx < len(fields) else []
@@ -1555,14 +1597,18 @@ def build_brackets(
                 if name not in fpi_by_name:
                     seeds = []
                     break
-                seeds.append(
-                    {
-                        "team_id": tid,
-                        "team_name": name,
-                        "seed": seed_num,
-                        "fpi": round(fpi_by_name[name], 2),
-                    }
-                )
+                wins, losses = sim_records.get(tid, {}).get(col, (None, None))
+                seed_entry = {
+                    "team_id": tid,
+                    "team_name": name,
+                    "seed": seed_num,
+                    "fpi": round(fpi_by_name[name], 2),
+                }
+                if wins is not None:
+                    seed_entry["wins"] = wins
+                    seed_entry["losses"] = losses
+                    seed_entry["record"] = sim_record_string(wins, losses)
+                seeds.append(seed_entry)
         if not seeds and len(field_ids) == 12:
             rated: list[tuple[str, float]] = []
             for tid in field_ids:
@@ -1570,15 +1616,20 @@ def build_brackets(
                 if name in fpi_by_name:
                     rated.append((tid, fpi_by_name[name]))
             rated.sort(key=lambda x: (-x[1], x[0]))
-            seeds = [
-                {
+            seeds = []
+            for i, (tid, fpi) in enumerate(rated[:12]):
+                wins, losses = sim_records.get(tid, {}).get(col, (None, None))
+                entry = {
                     "team_id": tid,
                     "team_name": id_to_name.get(tid, tid),
                     "seed": i + 1,
                     "fpi": round(fpi, 2),
                 }
-                for i, (tid, fpi) in enumerate(rated[:12])
-            ]
+                if wins is not None:
+                    entry["wins"] = wins
+                    entry["losses"] = losses
+                    entry["record"] = sim_record_string(wins, losses)
+                seeds.append(entry)
         for s in seeds:
             tid = s["team_id"]
             seed_hist.setdefault(tid, Counter())[str(s["seed"])] += 1
@@ -1721,6 +1772,7 @@ def main() -> int:
         conf_results["champions"],
         h2h_wins_by_col,
         h2h_games_by_col,
+        game_rows,
     )
     conference_deep = build_conference_deep(
         conferences,

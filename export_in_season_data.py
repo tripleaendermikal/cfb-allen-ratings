@@ -20,7 +20,9 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import export_sim_data as esd  # noqa: E402
+from cfb_conf_championship import compute_conf_results_by_sim  # noqa: E402
 from cfb_in_season_sim import is_completed, parse_score  # noqa: E402
+from cfb_playoff_elig import build_season_h2h_by_sim, load_sos_by_team_id  # noqa: E402
 from cfb_rating.in_season import compute_overall_margin  # noqa: E402
 
 IN_SEASON_PREFIX = "cfb_2026_in_season"
@@ -362,7 +364,25 @@ def main() -> int:
     enrich_games_scores(games, schedule)
     game_slugs = esd.build_game_slugs(games)
     conf_championship = esd.build_conf_championship(sim_cols, id_to_name)
-    brackets = esd.build_brackets(eligibility, sim_cols, name_to_id, id_to_name, leaderboard)
+    conf_results = compute_conf_results_by_sim(
+        SOURCES["games_sim"], SOURCES["games_fpi"], SOURCES["conferences"]
+    )
+    h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(game_rows, sim_cols)
+    sos_by_team_id = load_sos_by_team_id(SOURCES["games_fpi"])
+    brackets = esd.build_brackets(
+        eligibility,
+        sim_cols,
+        name_to_id,
+        id_to_name,
+        leaderboard,
+        records_rows,
+        elig_rows,
+        sos_by_team_id,
+        conf_results["champions"],
+        h2h_wins_by_col,
+        h2h_games_by_col,
+        game_rows,
+    )
     conference_deep = esd.build_conference_deep(
         conferences,
         conf_championship["champions_by_sim"],
