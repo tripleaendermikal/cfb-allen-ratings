@@ -8,6 +8,9 @@ Selection (12-team field per simulation):
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
   4. Top 7 ranked teams not already in the field (Group of 6 teams
      excluded from at-large; G6 access is autobid only)
+
+Seeding uses the same at-large ranking for seeds 1–11; the G6 qualifier is
+always seed 12.
 """
 
 from __future__ import annotations
@@ -397,6 +400,94 @@ def rank_at_large_candidates(
         )
         ranked.extend(ordered)
     return ranked
+
+
+def elig_by_team_id_for_col(elig_rows: list[dict], col: str) -> dict[str, int]:
+    return {
+        (row.get("team_id") or "").strip(): int(row[col])
+        for row in elig_rows
+        if (row.get("team_id") or "").strip()
+    }
+
+
+def seed_playoff_indices_col(
+    source_rows: list[dict],
+    col: str,
+    elig_by_team_id: dict[str, int],
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
+) -> list[int] | None:
+    """Return row indices in playoff seed order (1..12); G6 autobid is always seed 12."""
+    eligible = [
+        i
+        for i, src in enumerate(source_rows)
+        if elig_by_team_id.get(src["team_id"], 0) == 1
+        and not is_placeholder_team(src)
+    ]
+    if len(eligible) != PLAYOFF_FIELD_SIZE:
+        return None
+
+    g6_indices = [
+        i for i in eligible if source_rows[i]["conference"] in GROUP_CONFERENCES
+    ]
+    if len(g6_indices) != 1:
+        return None
+    g6_i = g6_indices[0]
+    eligible_non_g6 = {i for i in eligible if i != g6_i}
+
+    ranked = rank_at_large_candidates(
+        source_rows,
+        col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+    )
+    seed_indices: list[int] = []
+    for i in ranked:
+        if i in eligible_non_g6:
+            seed_indices.append(i)
+    for i in eligible:
+        if i != g6_i and i not in seed_indices:
+            seed_indices.append(i)
+    if len(seed_indices) != PLAYOFF_FIELD_SIZE - 1:
+        return None
+    seed_indices.append(g6_i)
+    return seed_indices
+
+
+def seed_playoff_field_col(
+    source_rows: list[dict],
+    col: str,
+    elig_by_team_id: dict[str, int],
+    sim_fpi_for_col: dict[str, float],
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
+) -> list[tuple[str, str, float]] | None:
+    """Seeded field as (team_name, conference, sim_fpi) for bracket simulation."""
+    indices = seed_playoff_indices_col(
+        source_rows,
+        col,
+        elig_by_team_id,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+    )
+    if not indices:
+        return None
+    seeded: list[tuple[str, str, float]] = []
+    for i in indices:
+        src = source_rows[i]
+        name = (src.get("team_name") or "").strip()
+        if not name or name == "TBD" or name not in sim_fpi_for_col:
+            return None
+        seeded.append((name, src.get("conference", ""), sim_fpi_for_col[name]))
+    return seeded
 
 
 def apply_at_large_bids_col(

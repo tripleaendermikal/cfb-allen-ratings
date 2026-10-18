@@ -7,8 +7,8 @@ Bracket rules:
   - First round: 5v12, 6v11, 7v10, 8v9 (highest vs lowest)
   - Quarterfinals: 1 vs 8/9 winner, 2 vs 7/10, 3 vs 6/11, 4 vs 5/12
   - Neutral-site games; win probability from per-sim FPI margin via logistic model
-  - Seeding and matchup strength use per-simulation team FPI draws (sim_XXXX columns),
-    not the static Overall point estimate in team_fpi
+  - Seeding: at-large ranking rules (wins, SOS, H2H, conf-champ boost); G6 is seed 12
+  - Matchup strength uses per-simulation team FPI draws (sim_XXXX columns)
 
 Examples:
   python cfb_playoff_odds_calc.py --demo
@@ -26,6 +26,13 @@ import re
 from pathlib import Path
 
 from cfb_playoff_odds import format_bracket, odds_table
+from cfb_playoff_elig import (
+    build_season_h2h_by_sim,
+    elig_by_team_id_for_col,
+    load_game_rows_for_h2h,
+    load_sos_by_team_id,
+    seed_playoff_field_col,
+)
 
 DEFAULT_ELIG_PATH = data_root() / "cfb_2026_FBS_playoff_elig_v2.csv"
 DEFAULT_GAMES_FPI_PATH = data_root() / "cfb_2026_fbs_games_with_fpi.csv"
@@ -80,28 +87,15 @@ def sim_columns(fieldnames: list[str]) -> list[str]:
     return [col for col in fieldnames if SIM_COL_PATTERN.match(col)]
 
 
-def seed_playoff_field(
-    elig_rows: list[dict[str, str]],
-    sim_col: str,
-    sim_fpi_for_col: dict[str, float],
-) -> list[tuple[str, str, float]]:
-    """Return seeded playoff teams: (team_name, conference, sim_fpi)."""
-    playoff = [
-        row
-        for row in elig_rows
-        if int(row[sim_col]) == 1 and row["team_name"] in sim_fpi_for_col
-    ]
-    if len(playoff) != 12:
-        return []
+def infer_records_path(elig_path: Path) -> Path:
+    return Path(str(elig_path).replace("FBS_playoff_elig_v2", "fbs_team_sim_records_v2"))
 
-    seeded = []
-    for row in playoff:
-        name = row["team_name"]
-        fpi = sim_fpi_for_col[name]
-        seeded.append((name, row["conference"], fpi))
 
-    seeded.sort(key=lambda item: (-item[2], item[0]))
-    return seeded
+def infer_games_sim_path(games_fpi_path: Path) -> Path:
+    base = str(games_fpi_path)
+    if base.endswith("_fbs_games_with_fpi.csv"):
+        return Path(base.replace("_fbs_games_with_fpi.csv", "_fbs_games_with_fpi_simulated.csv"))
+    return Path(base.replace("games_with_fpi.csv", "games_with_fpi_simulated.csv"))
 
 
 def bracket_title_odds(
@@ -119,8 +113,35 @@ def run_from_data(
     elig_path: Path,
     games_fpi_path: Path,
     output_path: Path,
+    *,
+    records_path: Path | None = None,
+    games_sim_path: Path | None = None,
+    conf_path: Path | None = None,
 ) -> int:
     sim_fpi_by_col = load_sim_fpi_by_team(games_fpi_path)
+    sos_by_team_id = load_sos_by_team_id(games_fpi_path)
+
+    records_path = records_path or infer_records_path(elig_path)
+    games_sim_path = games_sim_path or infer_games_sim_path(games_fpi_path)
+    conf_path = conf_path or games_fpi_path.parent / "espn_cfb_teams_conferences.csv"
+
+    with records_path.open(encoding="utf-8-sig", newline="") as infile:
+        records_rows = list(csv.DictReader(infile))
+
+    h2h_wins_by_col = None
+    h2h_games_by_col = None
+    conf_champions_by_sim = {col: {} for col in sim_columns(records_rows[0].keys()) if records_rows}
+    if games_sim_path.is_file() and conf_path.is_file():
+        from cfb_conf_championship import compute_conf_results_by_sim
+
+        conf_champions_by_sim = compute_conf_results_by_sim(
+            games_sim_path, games_fpi_path, conf_path
+        )["champions"]
+        game_rows, sim_cols_h2h = load_game_rows_for_h2h(games_sim_path)
+        if sim_cols_h2h:
+            h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
+                game_rows, sim_cols_h2h
+            )
 
     with elig_path.open(encoding="utf-8-sig", newline="") as infile:
         elig_reader = csv.DictReader(infile)
@@ -138,7 +159,17 @@ def run_from_data(
     used_sims = 0
 
     for sim_col in sim_cols:
-        seeded = seed_playoff_field(elig_rows, sim_col, sim_fpi_by_col[sim_col])
+        elig_by_team = elig_by_team_id_for_col(elig_rows, sim_col)
+        seeded = seed_playoff_field_col(
+            records_rows,
+            sim_col,
+            elig_by_team,
+            sim_fpi_by_col[sim_col],
+            sos_by_team_id,
+            conf_champions_by_sim,
+            h2h_wins_by_col,
+            h2h_games_by_col,
+        )
         if not seeded:
             continue
 

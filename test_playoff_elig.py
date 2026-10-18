@@ -16,8 +16,10 @@ from cfb_playoff_elig import (
     apply_g6_autobid_col,
     build_season_h2h_by_sim,
     compute_playoff_eligibility,
+    elig_by_team_id_for_col,
     eligibility_count,
     rank_at_large_candidates,
+    seed_playoff_indices_col,
 )
 
 
@@ -300,6 +302,87 @@ class TestPlayoffEligibility(unittest.TestCase):
         )
         nd_row = next(r for r in out if r["team_id"] == "87")
         self.assertEqual(int(nd_row["sim_0001"]), 0)
+
+
+class TestPlayoffSeeding(unittest.TestCase):
+    def _twelve_team_fixture(self):
+        teams = []
+        tid = 1
+        for conf in ("SEC", "Big Ten", "ACC", "Big 12"):
+            for _ in range(6):
+                teams.append(
+                    {
+                        "team_id": str(tid),
+                        "team_name": f"Team {tid}",
+                        "conference": conf,
+                    }
+                )
+                tid += 1
+        teams.append(
+            {"team_id": "200", "team_name": "G6", "conference": "MAC"}
+        )
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 6 for t in teams}
+        wins.update(
+            {
+                "1": 12,
+                "7": 12,
+                "13": 12,
+                "19": 12,
+                "2": 11,
+                "3": 11,
+                "4": 11,
+                "5": 11,
+                "6": 11,
+                "8": 11,
+                "9": 11,
+                "10": 11,
+                "200": 8,
+            }
+        )
+        rows = make_rows(teams, wins, fieldnames)
+        conf_champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "7",
+                "ACC": "13",
+                "Big 12": "19",
+            }
+        }
+        sos = {t["team_id"]: float(tid) for t in teams}
+        g6_pts = make_g6_points(teams, "sim_0001", {"200": 50})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, conf_champs, sos, g6_pts
+        )
+        return teams, rows, out, conf_champs, sos
+
+    def test_g6_always_twelfth_seed(self):
+        teams, rows, out, conf_champs, sos = self._twelve_team_fixture()
+        elig = elig_by_team_id_for_col(out, "sim_0001")
+        seeds = seed_playoff_indices_col(
+            rows, "sim_0001", elig, sos, conf_champs, None, None
+        )
+        self.assertIsNotNone(seeds)
+        self.assertEqual(len(seeds), 12)
+        g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
+        self.assertEqual(seeds[-1], g6_idx)
+        self.assertEqual(rows[g6_idx]["conference"], "MAC")
+
+    def test_non_g6_seed_order_matches_at_large_ranking(self):
+        teams, rows, out, conf_champs, sos = self._twelve_team_fixture()
+        elig = elig_by_team_id_for_col(out, "sim_0001")
+        seeds = seed_playoff_indices_col(
+            rows, "sim_0001", elig, sos, conf_champs, None, None
+        )
+        g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
+        eligible_non_g6 = {
+            i
+            for i, src in enumerate(rows)
+            if elig.get(src["team_id"], 0) == 1 and i != g6_idx
+        }
+        ranked = rank_at_large_candidates(rows, "sim_0001", sos, conf_champs)
+        expected = [i for i in ranked if i in eligible_non_g6]
+        self.assertEqual(seeds[:-1], expected)
 
 
 class TestG6PlayoffPoints(unittest.TestCase):

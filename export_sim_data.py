@@ -555,6 +555,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from cfb_conf_championship import compute_conf_results_by_sim
+from cfb_playoff_elig import (
+    build_season_h2h_by_sim,
+    elig_by_team_id_for_col,
+    load_sos_by_team_id,
+    seed_playoff_indices_col,
+)
 from cfb_playoff_odds import championship_odds_exact
 from cfb_playoff_odds_calc import load_sim_fpi_by_team
 
@@ -1510,6 +1516,12 @@ def build_brackets(
     name_to_id: dict[str, str],
     id_to_name: dict[str, str],
     leaderboard: list[dict],
+    records_rows: list[dict],
+    elig_rows: list[dict],
+    sos_by_team_id: dict[str, float],
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col,
+    h2h_games_by_col,
 ) -> dict:
     """Per-sim playoff seeds/brackets and team-centric summary."""
     sim_fpi_by_col = load_sim_fpi_by_team(SOURCES["games_fpi"])
@@ -1524,21 +1536,49 @@ def build_brackets(
     for sim_idx, col in enumerate(sim_cols):
         field_ids = fields[sim_idx] if sim_idx < len(fields) else []
         fpi_by_name = sim_fpi_by_col.get(col, {})
-        rated: list[tuple[str, float]] = []
-        for tid in field_ids:
-            name = id_to_name.get(tid, "")
-            if name in fpi_by_name:
-                rated.append((tid, fpi_by_name[name]))
-        rated.sort(key=lambda x: (-x[1], x[0]))
-        seeds = [
-            {
-                "team_id": tid,
-                "team_name": id_to_name.get(tid, tid),
-                "seed": i + 1,
-                "fpi": round(fpi, 2),
-            }
-            for i, (tid, fpi) in enumerate(rated[:12])
-        ]
+        elig_by_team = elig_by_team_id_for_col(elig_rows, col)
+        seed_indices = seed_playoff_indices_col(
+            records_rows,
+            col,
+            elig_by_team,
+            sos_by_team_id,
+            conf_champions_by_sim,
+            h2h_wins_by_col,
+            h2h_games_by_col,
+        )
+        seeds: list[dict] = []
+        if seed_indices and len(seed_indices) == 12:
+            for seed_num, row_idx in enumerate(seed_indices, start=1):
+                row = records_rows[row_idx]
+                tid = row["team_id"]
+                name = id_to_name.get(tid, row.get("team_name", tid))
+                if name not in fpi_by_name:
+                    seeds = []
+                    break
+                seeds.append(
+                    {
+                        "team_id": tid,
+                        "team_name": name,
+                        "seed": seed_num,
+                        "fpi": round(fpi_by_name[name], 2),
+                    }
+                )
+        if not seeds and len(field_ids) == 12:
+            rated: list[tuple[str, float]] = []
+            for tid in field_ids:
+                name = id_to_name.get(tid, "")
+                if name in fpi_by_name:
+                    rated.append((tid, fpi_by_name[name]))
+            rated.sort(key=lambda x: (-x[1], x[0]))
+            seeds = [
+                {
+                    "team_id": tid,
+                    "team_name": id_to_name.get(tid, tid),
+                    "seed": i + 1,
+                    "fpi": round(fpi, 2),
+                }
+                for i, (tid, fpi) in enumerate(rated[:12])
+            ]
         for s in seeds:
             tid = s["team_id"]
             seed_hist.setdefault(tid, Counter())[str(s["seed"])] += 1
@@ -1664,7 +1704,24 @@ def main() -> int:
     games = build_games(schedule, conf_by_id, margin_lists)
     game_slugs = build_game_slugs(games)
     conf_championship = build_conf_championship(sim_cols, id_to_name)
-    brackets = build_brackets(eligibility, sim_cols, name_to_id, id_to_name, leaderboard)
+    conf_results = compute_conf_results_by_sim(
+        SOURCES["games_sim"], SOURCES["games_fpi"], SOURCES["conferences"]
+    )
+    h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(game_rows, sim_cols)
+    sos_by_team_id = load_sos_by_team_id(SOURCES["games_fpi"])
+    brackets = build_brackets(
+        eligibility,
+        sim_cols,
+        name_to_id,
+        id_to_name,
+        leaderboard,
+        records_rows,
+        elig_rows,
+        sos_by_team_id,
+        conf_results["champions"],
+        h2h_wins_by_col,
+        h2h_games_by_col,
+    )
     conference_deep = build_conference_deep(
         conferences,
         conf_championship["champions_by_sim"],
