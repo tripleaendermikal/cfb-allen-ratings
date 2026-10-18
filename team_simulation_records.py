@@ -20,6 +20,14 @@ from pathlib import Path
 SIM_COL_PATTERN = re.compile(r"^sim_(\d+)$")
 
 
+def infer_games_fpi_path(games_sim_path: Path) -> Path:
+    """Map a *_simulated.csv games file to its per-sim FPI games file."""
+    name = games_sim_path.name
+    if name.endswith("_simulated.csv"):
+        return games_sim_path.with_name(name.replace("_simulated.csv", ".csv"))
+    return games_sim_path
+
+
 def load_conference_lookup(path: Path) -> tuple[dict[str, str], dict[str, str]]:
     """Return (by_team_id, by_team_name) -> conference label."""
     by_id: dict[str, str] = {}
@@ -112,6 +120,18 @@ def main() -> int:
                 v = (row.get(sc) or "").strip()
                 if v == "1":
                     wins[tid][sc] += 1
+
+    conf_path = args.conferences
+    if conf_path is None:
+        conf_path = script_dir / "espn_cfb_teams_conferences.csv"
+    fpi_path = infer_games_fpi_path(inp)
+    if conf_path.is_file() and fpi_path.is_file():
+        from cfb_conf_championship import apply_ccg_win_deltas_to_wins, compute_conf_results_by_sim
+
+        results = compute_conf_results_by_sim(inp, fpi_path, conf_path)
+        apply_ccg_win_deltas_to_wins(
+            wins, results["champions"], results["finalists"], sim_cols
+        )
 
     for tid in list(wins.keys()):
         team_name.setdefault(tid, "")
