@@ -266,6 +266,37 @@ def compute_conf_results_by_sim(
     }
 
 
+def ccg_participants_by_col(
+    finalists: dict[str, dict[str, list[str]]],
+    sim_cols: list[str],
+) -> dict[str, set[str]]:
+    """Teams that played a conference championship game in each simulation column."""
+    out: dict[str, set[str]] = {col: set() for col in sim_cols}
+    for col in sim_cols:
+        for pair in finalists.get(col, {}).values():
+            if len(pair) == 2:
+                out[col].update(pair)
+    return out
+
+
+def apply_ccg_win_deltas_to_wins(
+    wins: dict[str, dict[str, int]],
+    champions: dict[str, dict[str, str]],
+    finalists: dict[str, dict[str, list[str]]],
+    sim_cols: list[str],
+) -> None:
+    """Add one regular-season-style win for each conference championship victory."""
+    for col in sim_cols:
+        col_finals = finalists.get(col, {})
+        col_champs = champions.get(col, {})
+        for conf, pair in col_finals.items():
+            if len(pair) != 2:
+                continue
+            winner = col_champs.get(conf)
+            if winner and winner in pair:
+                wins[winner][col] = wins[winner].get(col, 0) + 1
+
+
 def compute_conf_championship_odds(
     games_sim_path: Path,
     games_fpi_path: Path,

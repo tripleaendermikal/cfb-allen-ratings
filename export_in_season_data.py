@@ -382,6 +382,7 @@ def main() -> int:
         h2h_wins_by_col,
         h2h_games_by_col,
         game_rows,
+        conf_results["finalists"],
     )
     conference_deep = esd.build_conference_deep(
         conferences,

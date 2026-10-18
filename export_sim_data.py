@@ -554,7 +554,7 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from cfb_conf_championship import compute_conf_results_by_sim
+from cfb_conf_championship import ccg_participants_by_col, compute_conf_results_by_sim
 from cfb_playoff_elig import (
     build_season_h2h_by_sim,
     elig_by_team_id_for_col,
@@ -1514,8 +1514,10 @@ def build_sim_records_by_team_col(
     records_rows: list[dict],
     sim_cols: list[str],
     game_rows: list[dict],
+    conf_champions_by_sim: dict[str, dict[str, str]] | None = None,
+    conf_finalists_by_sim: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict[str, dict[str, tuple[int, int]]]:
-    """Per team_id and sim column: (wins, losses) from sim results."""
+    """Per team_id and sim column: (wins, losses) from sim results including CCG."""
     from collections import defaultdict
 
     games_played: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -1528,6 +1530,12 @@ def build_sim_records_by_team_col(
             if v in ("0", "1"):
                 games_played[tid][col] += 1
 
+    ccg_played = (
+        ccg_participants_by_col(conf_finalists_by_sim, sim_cols)
+        if conf_finalists_by_sim
+        else {}
+    )
+
     by_team: dict[str, dict[str, tuple[int, int]]] = {}
     for row in records_rows:
         tid = (row.get("team_id") or "").strip()
@@ -1537,6 +1545,8 @@ def build_sim_records_by_team_col(
         for col in sim_cols:
             wins = int((row.get(col) or "0").strip() or 0)
             gp = games_played[tid].get(col, 0)
+            if tid in ccg_played.get(col, set()):
+                gp += 1
             losses = max(gp - wins, 0) if gp else 0
             by_team[tid][col] = (wins, losses)
     return by_team
@@ -1559,6 +1569,7 @@ def build_brackets(
     h2h_wins_by_col,
     h2h_games_by_col,
     game_rows: list[dict] | None = None,
+    conf_finalists_by_sim: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict:
     """Per-sim playoff seeds/brackets and team-centric summary."""
     sim_fpi_by_col = load_sim_fpi_by_team(SOURCES["games_fpi"])
@@ -1570,7 +1581,13 @@ def build_brackets(
     seed_counts: dict[str, int] = {}
     r1_seeds = [[5, 12], [6, 11], [7, 10], [8, 9]]
     sim_records = (
-        build_sim_records_by_team_col(records_rows, sim_cols, game_rows or [])
+        build_sim_records_by_team_col(
+            records_rows,
+            sim_cols,
+            game_rows or [],
+            conf_champions_by_sim,
+            conf_finalists_by_sim,
+        )
         if game_rows
         else {}
     )
@@ -1773,6 +1790,7 @@ def main() -> int:
         h2h_wins_by_col,
         h2h_games_by_col,
         game_rows,
+        conf_results["finalists"],
     )
     conference_deep = build_conference_deep(
         conferences,
