@@ -11,7 +11,6 @@ from cfb_g6_playoff_points import (
     points_for_team_sim,
 )
 from cfb_playoff_elig import (
-    AT_LARGE_BIDS,
     GROUP_CONFERENCES,
     NOTRE_DAME_NAME,
     apply_g6_autobid_col,
@@ -200,6 +199,56 @@ class TestPlayoffEligibility(unittest.TestCase):
         champs = {"sim_0001": {"SEC": "1"}}
         ranked = rank_at_large_candidates(source, "sim_0001", sos, champs)
         self.assertEqual(ranked[0], 0)
+
+    def test_g6_never_at_large_bid(self):
+        teams = [
+            {"team_id": "1", "team_name": "SEC", "conference": "SEC"},
+            {"team_id": "2", "team_name": "BT", "conference": "Big Ten"},
+            {"team_id": "3", "team_name": "ACC", "conference": "ACC"},
+            {"team_id": "4", "team_name": "B12", "conference": "Big 12"},
+            {"team_id": "5", "team_name": "G6", "conference": "MAC"},
+        ]
+        for i in range(6, 20):
+            teams.append(
+                {"team_id": str(i), "team_name": f"T{i}", "conference": "SEC"}
+            )
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        wins.update(
+            {
+                "1": 9,
+                "2": 9,
+                "3": 9,
+                "4": 9,
+                "5": 12,
+                "6": 12,
+                "7": 11,
+                "8": 11,
+                "9": 11,
+                "10": 11,
+                "11": 11,
+                "12": 11,
+                "13": 11,
+            }
+        )
+        rows = make_rows(teams, wins, fieldnames)
+        champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "2",
+                "ACC": "3",
+                "Big 12": "4",
+            }
+        }
+        sos = {t["team_id"]: float(i) for i, t in enumerate(teams)}
+        g6_pts = make_g6_points(teams, "sim_0001", {"5": 20})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, champs, sos, g6_pts
+        )
+        g6_row = next(r for r in out if r["team_id"] == "5")
+        self.assertEqual(int(g6_row["sim_0001"]), 1)
+        ranked = rank_at_large_candidates(rows, "sim_0001", sos, champs)
+        self.assertNotIn(4, ranked)
 
     def test_notre_dame_no_auto_bid(self):
         teams = []

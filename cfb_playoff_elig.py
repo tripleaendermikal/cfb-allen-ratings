@@ -6,7 +6,8 @@ Selection (12-team field per simulation):
   2. Group of 6 team with highest playoff points autobid
   3. Rank remaining teams: wins, then SOS within win tier, then H2H sweeps
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
-  4. Top 7 ranked teams not already in the field
+  4. Top 7 ranked teams not already in the field (Group of 6 teams
+     excluded from at-large; G6 access is autobid only)
 """
 
 from __future__ import annotations
@@ -370,7 +371,10 @@ def rank_at_large_candidates(
     h2h_wins = h2h_wins or {}
     h2h_games = h2h_games or {}
     all_indices = [
-        i for i, src in enumerate(source_rows) if not is_placeholder_team(src)
+        i
+        for i, src in enumerate(source_rows)
+        if not is_placeholder_team(src)
+        and src["conference"] not in GROUP_CONFERENCES
     ]
     by_wins: dict[int, list[int]] = defaultdict(list)
     for i in all_indices:
