@@ -14,18 +14,16 @@ from cfb_playoff_elig import (
     GROUP_CONFERENCES,
     NOTRE_DAME_NAME,
     apply_g6_autobid_col,
-    apply_notre_dame_rule_col,
+    build_season_h2h_by_sim,
     compute_playoff_eligibility,
+    elig_by_team_id_for_col,
     eligibility_count,
-    enforce_sec_big_ten_floor,
-    fill_win_tiers_col,
-    removable_for_trim,
-    trim_overflow_col,
+    rank_at_large_candidates,
+    seed_playoff_indices_col,
 )
 
 
 def make_rows(teams, wins_by_id, fieldnames=None):
-    """teams: list of dicts with team_id, team_name, conference."""
     cols = fieldnames or ["team_id", "team_name", "conference", "sim_0001"]
     rows = []
     for t in teams:
@@ -44,13 +42,34 @@ def make_g6_points(teams, sim_col, points_by_id):
     return out
 
 
+def make_h2h(game_specs, sim_col="sim_0001"):
+    """game_specs: list of (winner_id, loser_id) for one meeting each."""
+    rows = []
+    for w, loser in game_specs:
+        rows.append(
+            {
+                "team_id": w,
+                "opponent_id": loser,
+                sim_col: "1",
+            }
+        )
+        rows.append(
+            {
+                "team_id": loser,
+                "opponent_id": w,
+                sim_col: "0",
+            }
+        )
+    h2h_w, h2h_g = build_season_h2h_by_sim(rows, [sim_col])
+    return h2h_w, h2h_g
+
+
 class TestPlayoffEligibility(unittest.TestCase):
     def test_field_size_always_twelve_minimal(self):
-        """Synthetic field produces exactly 12 eligible."""
         teams = []
         tid = 1
         for conf in ("SEC", "Big Ten", "ACC", "Big 12"):
-            for _ in range(4):
+            for _ in range(6):
                 teams.append(
                     {
                         "team_id": str(tid),
@@ -59,96 +78,65 @@ class TestPlayoffEligibility(unittest.TestCase):
                     }
                 )
                 tid += 1
-        for conf in ("MAC", "American"):
-            teams.append(
-                {"team_id": str(tid), "team_name": f"Team {tid}", "conference": conf}
-            )
-            tid += 1
         teams.append(
-            {
-                "team_id": "87",
-                "team_name": NOTRE_DAME_NAME,
-                "conference": "FBS Indep.",
-            }
+            {"team_id": "200", "team_name": "G6", "conference": "MAC"}
         )
-        wins = {t["team_id"]: 8 for t in teams}
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 6 for t in teams}
         wins.update(
             {
                 "1": 12,
-                "5": 12,
-                "9": 12,
+                "7": 12,
                 "13": 12,
-                "17": 11,
-                "18": 10,
-                "87": 11,
+                "19": 12,
                 "2": 11,
-                "3": 10,
-                "6": 10,
-                "7": 9,
+                "3": 11,
+                "4": 11,
+                "5": 11,
+                "6": 11,
+                "8": 11,
+                "9": 11,
+                "10": 11,
+                "200": 8,
             }
         )
-
-        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
         rows = make_rows(teams, wins, fieldnames)
         conf_champs = {
             "sim_0001": {
                 "SEC": "1",
-                "Big Ten": "5",
-                "ACC": "9",
-                "Big 12": "13",
+                "Big Ten": "7",
+                "ACC": "13",
+                "Big 12": "19",
             }
         }
-        sos = {t["team_id"]: float(i) for i, t in enumerate(teams)}
-        fpi = {t["team_id"]: {"sim_0001": float(i)} for i, t in enumerate(teams)}
-        g6_pts = make_g6_points(teams, "sim_0001", {"17": 50, "18": 40})
+        sos = {t["team_id"]: float(tid) for t in teams}
+        fpi = {t["team_id"]: {"sim_0001": 0.0} for t in teams}
+        g6_pts = make_g6_points(teams, "sim_0001", {"200": 50})
 
         out = compute_playoff_eligibility(
             rows, fieldnames, fpi, conf_champs, sos, g6_pts
         )
         self.assertEqual(eligibility_count(out, "sim_0001"), 12)
 
-    def test_notre_dame_auto_bid_threshold(self):
-        source = [
-            {
-                "team_id": "87",
-                "team_name": NOTRE_DAME_NAME,
-                "conference": "FBS Indep.",
-                "sim_0001": "10",
-            }
-        ]
-        output = [{"team_id": "87", "sim_0001": 0}]
-        apply_notre_dame_rule_col(output, source, "sim_0001")
-        self.assertEqual(int(output[0]["sim_0001"]), 0)
-
-        source[0]["sim_0001"] = "11"
-        apply_notre_dame_rule_col(output, source, "sim_0001")
-        self.assertEqual(int(output[0]["sim_0001"]), 1)
-
-    def test_notre_dame_eleven_wins_gets_bid(self):
+    def test_p4_and_g6_autobids_plus_seven(self):
         teams = [
-            {"team_id": "1", "team_name": "A", "conference": "SEC"},
-            {
-                "team_id": "87",
-                "team_name": NOTRE_DAME_NAME,
-                "conference": "FBS Indep.",
-            },
+            {"team_id": "1", "team_name": "SEC", "conference": "SEC"},
+            {"team_id": "2", "team_name": "BT", "conference": "Big Ten"},
+            {"team_id": "3", "team_name": "ACC", "conference": "ACC"},
+            {"team_id": "4", "team_name": "B12", "conference": "Big 12"},
+            {"team_id": "5", "team_name": "G6", "conference": "MAC"},
         ]
-        for extra_id in range(2, 20):
-            conf = ["SEC", "Big Ten", "ACC", "Big 12"][extra_id % 4]
+        for i in range(6, 20):
             teams.append(
                 {
-                    "team_id": str(extra_id),
-                    "team_name": f"T{extra_id}",
-                    "conference": conf,
+                    "team_id": str(i),
+                    "team_name": f"T{i}",
+                    "conference": "SEC",
                 }
             )
-        teams.append(
-            {"team_id": "200", "team_name": "Boise", "conference": "Pac-12"}
-        )
         fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
-        wins = {t["team_id"]: 7 + (int(t["team_id"]) % 5) for t in teams}
-        wins["1"] = 12
-        wins["87"] = 11
+        wins = {t["team_id"]: 10 for t in teams}
+        wins.update({"1": 9, "2": 9, "3": 9, "4": 9, "5": 7, "6": 12, "7": 11})
         rows = make_rows(teams, wins, fieldnames)
         champs = {
             "sim_0001": {
@@ -158,162 +146,243 @@ class TestPlayoffEligibility(unittest.TestCase):
                 "Big 12": "4",
             }
         }
-        sos = {t["team_id"]: 0.0 for t in teams}
-        fpi = {t["team_id"]: {"sim_0001": 0.0} for t in teams}
-        g6_pts = make_g6_points(teams, "sim_0001", {"200": 30})
-        out = compute_playoff_eligibility(rows, fieldnames, fpi, champs, sos, g6_pts)
-        nd_row = next(r for r in out if r["team_name"] == NOTRE_DAME_NAME)
-        self.assertEqual(int(nd_row["sim_0001"]), 1)
+        sos = {t["team_id"]: float(i) for i, t in enumerate(teams)}
+        g6_pts = make_g6_points(teams, "sim_0001", {"5": 20})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, champs, sos, g6_pts
+        )
+        self.assertEqual(int(out[0]["sim_0001"]), 1)
+        self.assertEqual(int(out[4]["sim_0001"]), 1)
+        self.assertEqual(eligibility_count(out, "sim_0001"), 12)
 
-    def test_notre_dame_ten_wins_fills_acc_big12_tier(self):
-        """10-win Notre Dame enters via the ACC/Big 12 win-tier fill."""
+    def test_at_large_order_wins_then_sos(self):
         source = [
-            {
-                "team_id": "87",
-                "team_name": NOTRE_DAME_NAME,
-                "conference": "FBS Indep.",
-                "sim_0001": "10",
-            },
-            {
-                "team_id": "1",
-                "team_name": "ACC Team",
-                "conference": "ACC",
-                "sim_0001": "11",
-            },
+            {"team_id": "1", "team_name": "A", "conference": "SEC", "sim_0001": "11"},
+            {"team_id": "2", "team_name": "B", "conference": "SEC", "sim_0001": "10"},
+            {"team_id": "3", "team_name": "C", "conference": "SEC", "sim_0001": "10"},
         ]
-        output = [
-            {"team_id": "87", "sim_0001": 0},
-            {"team_id": "1", "sim_0001": 1},
-        ]
-        sos = {"87": 5.0, "1": 0.0}
-        fill_win_tiers_col(output, source, "sim_0001", sos)
-        self.assertEqual(int(output[0]["sim_0001"]), 1)
+        sos = {"1": 1.0, "2": 5.0, "3": 2.0}
+        ranked = rank_at_large_candidates(source, "sim_0001", sos, {"sim_0001": {}})
+        self.assertEqual(ranked[0], 0)
+        self.assertEqual(ranked[1], 1)
+        self.assertEqual(ranked[2], 2)
 
-    def test_trim_notre_dame_ten_win(self):
-        """Category 3 removes 10-win Notre Dame when trimming overflow."""
+    def test_h2h_sweep_moves_team_up(self):
         source = [
-            {
-                "team_id": "87",
-                "team_name": NOTRE_DAME_NAME,
-                "conference": "FBS Indep.",
-                "sim_0001": "10",
-            },
+            {"team_id": "1", "team_name": "A", "conference": "SEC", "sim_0001": "10"},
+            {"team_id": "2", "team_name": "B", "conference": "SEC", "sim_0001": "10"},
         ]
-        output = [{"team_id": "87", "sim_0001": 1}]
-        for i in range(1, 14):
-            source.append(
-                {
-                    "team_id": str(i),
-                    "team_name": f"F{i}",
-                    "conference": "SEC",
-                    "sim_0001": "11",
-                }
+        sos = {"1": 1.0, "2": 5.0}
+        h2h_w, h2h_g = make_h2h([("2", "1")])
+        ranked = rank_at_large_candidates(
+            source, "sim_0001", sos, {"sim_0001": {}}, h2h_w, h2h_g
+        )
+        self.assertEqual(ranked[0], 1)
+
+    def test_h2h_three_cycle_uses_sos_only(self):
+        source = [
+            {"team_id": "1", "team_name": "A", "conference": "SEC", "sim_0001": "10"},
+            {"team_id": "2", "team_name": "B", "conference": "SEC", "sim_0001": "10"},
+            {"team_id": "3", "team_name": "C", "conference": "SEC", "sim_0001": "10"},
+        ]
+        sos = {"1": 1.0, "2": 2.0, "3": 3.0}
+        h2h_w, h2h_g = make_h2h([("1", "2"), ("2", "3"), ("3", "1")])
+        ranked = rank_at_large_candidates(
+            source, "sim_0001", sos, {"sim_0001": {}}, h2h_w, h2h_g
+        )
+        self.assertEqual(ranked, [2, 1, 0])
+
+    def test_conf_champ_same_wins_same_league(self):
+        source = [
+            {"team_id": "1", "team_name": "Champ", "conference": "SEC", "sim_0001": "10"},
+            {"team_id": "2", "team_name": "Other", "conference": "SEC", "sim_0001": "10"},
+        ]
+        sos = {"1": 1.0, "2": 5.0}
+        champs = {"sim_0001": {"SEC": "1"}}
+        ranked = rank_at_large_candidates(source, "sim_0001", sos, champs)
+        self.assertEqual(ranked[0], 0)
+
+    def test_g6_never_at_large_bid(self):
+        teams = [
+            {"team_id": "1", "team_name": "SEC", "conference": "SEC"},
+            {"team_id": "2", "team_name": "BT", "conference": "Big Ten"},
+            {"team_id": "3", "team_name": "ACC", "conference": "ACC"},
+            {"team_id": "4", "team_name": "B12", "conference": "Big 12"},
+            {"team_id": "5", "team_name": "G6", "conference": "MAC"},
+        ]
+        for i in range(6, 20):
+            teams.append(
+                {"team_id": str(i), "team_name": f"T{i}", "conference": "SEC"}
             )
-            output.append({"team_id": str(i), "sim_0001": 1})
-        protected = set()
-        champs = set()
-        sos = {"87": 1.0}
-        sos.update({str(i): 0.0 for i in range(1, 14)})
-        trim_overflow_col(output, source, "sim_0001", sos, champs, protected)
-        self.assertEqual(eligibility_count(output, "sim_0001"), 12)
-        self.assertEqual(int(output[0]["sim_0001"]), 0)
-
-    def test_sos_tiebreak_sec_rule4(self):
-        """Higher SOS wins when SEC wins are tied for rule 4 pool."""
-        source = [
-            {"team_id": "10", "team_name": "Low SOS", "conference": "SEC"},
-            {"team_id": "11", "team_name": "High SOS", "conference": "SEC"},
-        ]
-        output = [
-            {"team_id": "10", "team_name": "Low SOS", "conference": "SEC", "sim_0001": 0},
-            {"team_id": "11", "team_name": "High SOS", "conference": "SEC", "sim_0001": 0},
-        ]
-        for row in source:
-            row["sim_0001"] = "10"
-        from cfb_playoff_elig import add_top_n_by_conference
-
-        sos = {"10": 1.0, "11": 5.0}
-        add_top_n_by_conference(output, source, "sim_0001", "SEC", 1, sos)
-        self.assertEqual(int(output[1]["sim_0001"]), 1)
-        self.assertEqual(int(output[0]["sim_0001"]), 0)
-
-    def test_fill_tiers_stop_at_twelve(self):
-        """Tier fill stops at 12 before advancing to the next tier."""
-        source = []
-        output = []
-        for i in range(15):
-            source.append(
-                {
-                    "team_id": str(i),
-                    "team_name": f"T{i}",
-                    "conference": "SEC",
-                    "sim_0001": "10",
-                }
-            )
-            output.append({"team_id": str(i), "sim_0001": 0})
-        sos = {str(i): float(i) for i in range(15)}
-        fill_win_tiers_col(output, source, "sim_0001", sos)
-        self.assertEqual(eligibility_count(output, "sim_0001"), 12)
-
-    def test_trim_sec_ten_win_non_champion(self):
-        """Category 4 removes lowest-SOS SEC non-champion with exactly 10 wins."""
-        source = [
-            {"team_id": "1", "team_name": "Champ", "conference": "SEC"},
-            {"team_id": "2", "team_name": "Low SOS", "conference": "SEC"},
-            {"team_id": "3", "team_name": "Third SEC", "conference": "SEC"},
-        ]
-        for row in source:
-            row["sim_0001"] = "10"
-        output = [
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        wins.update(
             {
-                "team_id": row["team_id"],
-                "team_name": row["team_name"],
-                "conference": row["conference"],
-                "sim_0001": 1,
+                "1": 9,
+                "2": 9,
+                "3": 9,
+                "4": 9,
+                "5": 12,
+                "6": 12,
+                "7": 11,
+                "8": 11,
+                "9": 11,
+                "10": 11,
+                "11": 11,
+                "12": 11,
+                "13": 11,
             }
-            for row in source
-        ]
-        for i in range(4, 17):
-            source.append(
-                {
-                    "team_id": str(i),
-                    "team_name": f"F{i}",
-                    "conference": "ACC",
-                    "sim_0001": "11",
-                }
-            )
-            output.append({"team_id": str(i), "sim_0001": 1})
-        protected = {0}
-        champs = {0}
-        sos = {"1": 0.0, "2": 1.0, "3": 2.0}
-        sos.update({str(i): 0.0 for i in range(4, 17)})
-        trim_overflow_col(output, source, "sim_0001", sos, champs, protected)
-        self.assertEqual(eligibility_count(output, "sim_0001"), 12)
-        self.assertEqual(int(output[0]["sim_0001"]), 1)
-        self.assertEqual(int(output[1]["sim_0001"]), 0)
-        self.assertEqual(int(output[2]["sim_0001"]), 1)
+        )
+        rows = make_rows(teams, wins, fieldnames)
+        champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "2",
+                "ACC": "3",
+                "Big 12": "4",
+            }
+        }
+        sos = {t["team_id"]: float(i) for i, t in enumerate(teams)}
+        g6_pts = make_g6_points(teams, "sim_0001", {"5": 20})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, champs, sos, g6_pts
+        )
+        g6_row = next(r for r in out if r["team_id"] == "5")
+        self.assertEqual(int(g6_row["sim_0001"]), 1)
+        ranked = rank_at_large_candidates(rows, "sim_0001", sos, champs)
+        self.assertNotIn(4, ranked)
 
-    def test_trim_protects_rule_123_from_random(self):
-        """Random trim category never removes rule 1-3 protected teams."""
-        source = []
-        output = []
-        for i in range(13):
-            source.append(
-                {
-                    "team_id": str(i),
-                    "team_name": f"T{i}",
-                    "conference": "ACC",
-                    "sim_0001": "11",
-                }
+    def test_notre_dame_no_auto_bid(self):
+        teams = []
+        for i in range(1, 25):
+            conf = ["SEC", "Big Ten", "ACC", "Big 12"][i % 4]
+            teams.append(
+                {"team_id": str(i), "team_name": f"T{i}", "conference": conf}
             )
-            output.append({"team_id": str(i), "sim_0001": 1})
-        protected = {0, 1, 2}
-        champs = set()
-        sos = {str(i): float(i) for i in range(13)}
-        trim_overflow_col(output, source, "sim_0001", sos, champs, protected)
-        self.assertEqual(eligibility_count(output, "sim_0001"), 12)
-        for idx in protected:
-            self.assertEqual(int(output[idx]["sim_0001"]), 1)
+        teams.append(
+            {
+                "team_id": "87",
+                "team_name": NOTRE_DAME_NAME,
+                "conference": "FBS Indep.",
+            }
+        )
+        teams.append({"team_id": "200", "team_name": "G6", "conference": "MAC"})
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        wins.update(
+            {
+                "1": 12,
+                "2": 12,
+                "3": 12,
+                "4": 12,
+                "87": 11,
+                "5": 12,
+                "6": 12,
+                "7": 12,
+                "8": 12,
+                "9": 12,
+                "10": 12,
+                "11": 12,
+                "200": 6,
+            }
+        )
+        rows = make_rows(teams, wins, fieldnames)
+        champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "2",
+                "ACC": "3",
+                "Big 12": "4",
+            }
+        }
+        sos = {t["team_id"]: float(i) for i, t in enumerate(teams)}
+        g6_pts = make_g6_points(teams, "sim_0001", {"200": 99})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, champs, sos, g6_pts
+        )
+        nd_row = next(r for r in out if r["team_id"] == "87")
+        self.assertEqual(int(nd_row["sim_0001"]), 0)
+
+
+class TestPlayoffSeeding(unittest.TestCase):
+    def _twelve_team_fixture(self):
+        teams = []
+        tid = 1
+        for conf in ("SEC", "Big Ten", "ACC", "Big 12"):
+            for _ in range(6):
+                teams.append(
+                    {
+                        "team_id": str(tid),
+                        "team_name": f"Team {tid}",
+                        "conference": conf,
+                    }
+                )
+                tid += 1
+        teams.append(
+            {"team_id": "200", "team_name": "G6", "conference": "MAC"}
+        )
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 6 for t in teams}
+        wins.update(
+            {
+                "1": 12,
+                "7": 12,
+                "13": 12,
+                "19": 12,
+                "2": 11,
+                "3": 11,
+                "4": 11,
+                "5": 11,
+                "6": 11,
+                "8": 11,
+                "9": 11,
+                "10": 11,
+                "200": 8,
+            }
+        )
+        rows = make_rows(teams, wins, fieldnames)
+        conf_champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "7",
+                "ACC": "13",
+                "Big 12": "19",
+            }
+        }
+        sos = {t["team_id"]: float(tid) for t in teams}
+        g6_pts = make_g6_points(teams, "sim_0001", {"200": 50})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, conf_champs, sos, g6_pts
+        )
+        return teams, rows, out, conf_champs, sos
+
+    def test_g6_always_twelfth_seed(self):
+        teams, rows, out, conf_champs, sos = self._twelve_team_fixture()
+        elig = elig_by_team_id_for_col(out, "sim_0001")
+        seeds = seed_playoff_indices_col(
+            rows, "sim_0001", elig, sos, conf_champs, None, None
+        )
+        self.assertIsNotNone(seeds)
+        self.assertEqual(len(seeds), 12)
+        g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
+        self.assertEqual(seeds[-1], g6_idx)
+        self.assertEqual(rows[g6_idx]["conference"], "MAC")
+
+    def test_non_g6_seed_order_matches_at_large_ranking(self):
+        teams, rows, out, conf_champs, sos = self._twelve_team_fixture()
+        elig = elig_by_team_id_for_col(out, "sim_0001")
+        seeds = seed_playoff_indices_col(
+            rows, "sim_0001", elig, sos, conf_champs, None, None
+        )
+        g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
+        eligible_non_g6 = {
+            i
+            for i, src in enumerate(rows)
+            if elig.get(src["team_id"], 0) == 1 and i != g6_idx
+        }
+        ranked = rank_at_large_candidates(rows, "sim_0001", sos, conf_champs)
+        expected = [i for i in ranked if i in eligible_non_g6]
+        self.assertEqual(seeds[:-1], expected)
 
 
 class TestG6PlayoffPoints(unittest.TestCase):
@@ -324,20 +393,13 @@ class TestG6PlayoffPoints(unittest.TestCase):
             "41": "FBS Indep.",
         }
         games = [
-            {
-                "opponent_id": "200",
-                "sim_0001": "1",
-            },
-            {
-                "opponent_id": "41",
-                "sim_0001": "1",
-            },
+            {"opponent_id": "200", "sim_0001": "1"},
+            {"opponent_id": "41", "sim_0001": "1"},
         ]
         champs = {"sim_0001": {"American": "100"}}
         pts = points_for_team_sim(
             "100", "American", games, "sim_0001", conf_by_team, champs
         )
-        # 2 wins + 1 non-G6 win (not UConn) + conf champ
         self.assertEqual(pts, 4)
 
     def test_uconn_win_no_extra_bonus(self):
@@ -346,7 +408,6 @@ class TestG6PlayoffPoints(unittest.TestCase):
         pts = points_for_team_sim(
             "100", "MAC", games, "sim_0001", conf_by_team, {"sim_0001": {}}
         )
-        # 1 win only (no non-G6 win bonus vs UConn)
         self.assertEqual(pts, 1)
 
     def test_g6_autobid_picks_highest_points(self):
@@ -377,50 +438,6 @@ class TestG6PlayoffPoints(unittest.TestCase):
         sos = {"10": 1.0, "11": 5.0}
         apply_g6_autobid_col(output, source, "sim_0001", g6_pts, sos)
         self.assertEqual(int(output[1]["sim_0001"]), 1)
-
-    def test_removable_for_trim_allows_drop_to_two_sec(self):
-        """Trim may remove a third SEC team when two would remain."""
-        source = [
-            {"team_id": "1", "team_name": "SEC A", "conference": "SEC"},
-            {"team_id": "2", "team_name": "SEC B", "conference": "SEC"},
-            {"team_id": "3", "team_name": "SEC C", "conference": "SEC"},
-        ]
-        for row in source:
-            row["sim_0001"] = "10"
-        output = [
-            {"team_id": row["team_id"], "sim_0001": 1} for row in source
-        ]
-        sos = {"1": 3.0, "2": 2.0, "3": 1.0}
-        safe = removable_for_trim(output, source, "sim_0001", [0, 1, 2])
-        self.assertEqual(safe, [0, 1, 2])
-        output_two = [
-            {"team_id": "1", "sim_0001": 1},
-            {"team_id": "2", "sim_0001": 1},
-        ]
-        source_two = source[:2]
-        self.assertEqual(
-            removable_for_trim(output_two, source_two, "sim_0001", [0, 1]), []
-        )
-
-    def test_enforce_sec_big_ten_floor_stops_at_two(self):
-        """Floor backfills only until two SEC teams are in the field."""
-        source = [
-            {"team_id": "1", "team_name": "SEC A", "conference": "SEC"},
-            {"team_id": "2", "team_name": "SEC B", "conference": "SEC"},
-            {"team_id": "3", "team_name": "SEC C", "conference": "SEC"},
-        ]
-        for row in source:
-            row["sim_0001"] = "10"
-        output = [
-            {"team_id": "1", "sim_0001": 1},
-            {"team_id": "2", "sim_0001": 0},
-            {"team_id": "3", "sim_0001": 0},
-        ]
-        sos = {"1": 3.0, "2": 2.0, "3": 1.0}
-        enforce_sec_big_ten_floor(output, source, "sim_0001", sos)
-        self.assertEqual(int(output[0]["sim_0001"]), 1)
-        self.assertEqual(int(output[1]["sim_0001"]), 1)
-        self.assertEqual(int(output[2]["sim_0001"]), 0)
 
     def test_compute_from_games_csv(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -453,7 +470,6 @@ class TestG6PlayoffPoints(unittest.TestCase):
             champs = {"sim_0001": {"American": "100"}}
             _, rows = compute_g6_playoff_points(games_path, conf_path, champs)
             row = next(r for r in rows if r["team_id"] == "100")
-            # 1 win + 1 non-G6 win + conf champ
             self.assertEqual(int(row["sim_0001"]), 3)
 
 

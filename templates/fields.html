@@ -35,6 +35,7 @@
           <th data-sort="num">Seed</th>
           <th data-sort="text">Team</th>
           <th data-sort="text">Conference</th>
+          <th data-sort="text">Record</th>
           <th data-sort="num">Rating</th>
           <th data-sort="text">Conf champ</th>
         </tr>
@@ -52,6 +53,9 @@
             {% if t.conference %}
             <span class="badge" style="background:{{ t.conference | conf_color }}">{{ t.conference }}</span>
             {% else %}—{% endif %}
+          </td>
+          <td class="num" data-value="{{ t.record or '' }}">
+            {% if t.record %}{{ t.record }}{% else %}—{% endif %}
           </td>
           <td class="num" data-value="{{ t.fpi if t.fpi is not none else '' }}">
             {% if t.fpi is not none %}{{ "%.1f"|format(t.fpi) }}{% else %}—{% endif %}

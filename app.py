@@ -1079,6 +1079,7 @@ def create_app() -> Flask:
                                     "team_name": s["team_name"],
                                     "conference": conf,
                                     "fpi": s.get("fpi"),
+                                    "record": s.get("record"),
                                     "is_conf_champ": is_champ,
                                     "champ_conference": champ_by_team.get(tid),
                                     "is_independent": conf == "FBS Indep.",

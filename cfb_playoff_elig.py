@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
-"""Compute FBS playoff eligibility flags from team simulation win totals."""
+"""Compute FBS playoff eligibility flags from team simulation win totals.
+
+Selection (12-team field per simulation):
+  1. Power Four conference champions autobid
+  2. Group of 6 team with highest playoff points autobid
+  3. Rank remaining teams: wins, then SOS within win tier, then H2H sweeps
+     (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
+  4. Top 7 ranked teams not already in the field (Group of 6 teams
+     excluded from at-large; G6 access is autobid only)
+
+Seeding uses the same at-large ranking for seeds 1–11; the G6 qualifier is
+always seed 12.
+"""
+
+from __future__ import annotations
 
 import csv
-import random
 import re
+from collections import defaultdict
 from pathlib import Path
 
 SEC_BIG_TEN = {"SEC", "Big Ten"}
@@ -20,27 +34,23 @@ GROUP_CONFERENCES = {
     "MAC",
 }
 
-FILL_TIERS = [
-    ("SEC", 10),
-    ("Big Ten", 10),
-    (ACC_BIG_12, 10),
-    ("SEC", 9),
-    ("Big Ten", 9),
-    (None, 12),
-]
-
-MIN_SEC_BIG_TEN_IN_FIELD = 2
+AT_LARGE_BIDS = 7
+PLAYOFF_FIELD_SIZE = 12
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
+PLACEHOLDER_TEAM_IDS = frozenset({"-1", "-2"})
+
+
+def is_placeholder_team(row: dict) -> bool:
+    tid = (row.get("team_id") or "").strip()
+    name = (row.get("team_name") or "").strip().upper()
+    if tid in PLACEHOLDER_TEAM_IDS:
+        return True
+    return name == "TBD"
 
 
 def sim_columns(fieldnames):
     return [col for col in fieldnames if SIM_COL_PATTERN.match(col)]
-
-
-def sim_col_seed(col):
-    match = re.search(r"(\d+)$", col)
-    return int(match.group(1)) if match else 0
 
 
 def home_field_adjustment(neutral_site, home_away):
@@ -90,7 +100,9 @@ def team_sos(sos_by_team_id, team_id):
 
 def winningest_in_conference(source_rows, col, conference):
     candidates = [
-        i for i, src in enumerate(source_rows) if src["conference"] == conference
+        i
+        for i, src in enumerate(source_rows)
+        if src["conference"] == conference and not is_placeholder_team(src)
     ]
     if not candidates:
         return None
@@ -109,7 +121,9 @@ def power_four_conf_champion_indices(source_rows, col, conf_champions_by_sim):
     winners = set()
     for conf in POWER_FOUR_CONFERENCES:
         tid = col_champs.get(conf)
-        if tid and tid in team_id_to_index:
+        if tid and tid in team_id_to_index and not is_placeholder_team(
+            source_rows[team_id_to_index[tid]]
+        ):
             winners.add(team_id_to_index[tid])
         else:
             i = winningest_in_conference(source_rows, col, conf)
@@ -129,7 +143,9 @@ def apply_power_four_conf_champions_col(
 
 def group_row_indices(source_rows):
     return [
-        i for i, row in enumerate(source_rows) if row["conference"] in GROUP_CONFERENCES
+        i
+        for i, row in enumerate(source_rows)
+        if row["conference"] in GROUP_CONFERENCES and not is_placeholder_team(row)
     ]
 
 
@@ -140,7 +156,7 @@ def g6_points_for_team(g6_points_by_team_id, team_id, col):
 def apply_g6_autobid_col(
     output_rows, source_rows, col, g6_points_by_team_id, sos_by_team_id
 ):
-    """Rule 3: G6 autobid to highest playoff-points team (SOS tiebreak)."""
+    """G6 autobid to highest playoff-points team (SOS tiebreak)."""
     group_indices = group_row_indices(source_rows)
     for i in group_indices:
         output_rows[i][col] = 0
@@ -159,327 +175,346 @@ def apply_g6_autobid_col(
     output_rows[pick][col] = 1
 
 
-def g6_autobid_index(output_rows, source_rows, col):
-    eligible = [
-        i
-        for i in group_row_indices(source_rows)
-        if int(output_rows[i][col]) == 1
-    ]
-    return eligible[0] if len(eligible) == 1 else None
-
-
-def notre_dame_index(source_rows):
-    for i, src in enumerate(source_rows):
-        if src["team_name"] == NOTRE_DAME_NAME:
-            return i
-    return None
-
-
-def is_acc_big12_or_notre_dame(src):
-    return src["conference"] in ACC_BIG_12 or src["team_name"] == NOTRE_DAME_NAME
-
-
-def apply_notre_dame_rule_col(output_rows, source_rows, col):
-    """Rule 2: Notre Dame with >= 11 wins."""
-    for i, src in enumerate(source_rows):
-        if src["team_name"] == NOTRE_DAME_NAME and int(src[col]) >= 11:
-            output_rows[i][col] = 1
-
-
 def eligibility_count(output_rows, col):
     return sum(int(row[col]) == 1 for row in output_rows)
 
 
-def conference_eligible_count(output_rows, source_rows, col, conference):
-    return sum(
-        1
-        for i, src in enumerate(source_rows)
-        if src["conference"] == conference and int(output_rows[i][col]) == 1
-    )
+def sos_rank_key(source_rows, sos_by_team_id, index):
+    tid = source_rows[index]["team_id"]
+    return (team_sos(sos_by_team_id, tid), int(tid))
 
 
-def conference_team_count(source_rows, conference):
-    return sum(1 for src in source_rows if src["conference"] == conference)
-
-
-def removable_for_trim(output_rows, source_rows, col, candidates):
-    """Drop removals that would leave SEC or Big Ten with fewer than 2 teams."""
-    safe = []
-    for i in candidates:
-        conf = source_rows[i]["conference"]
-        if conf in SEC_BIG_TEN:
-            league_size = conference_team_count(source_rows, conf)
-            in_field = conference_eligible_count(output_rows, source_rows, col, conf)
-            if (
-                league_size >= MIN_SEC_BIG_TEN_IN_FIELD
-                and in_field - 1 < MIN_SEC_BIG_TEN_IN_FIELD
-            ):
-                continue
-        safe.append(i)
-    return safe
-
-
-def enforce_sec_big_ten_floor(output_rows, source_rows, col, sos_by_team_id):
-    """Ensure at least MIN_SEC_BIG_TEN_IN_FIELD teams per SEC / Big Ten when possible."""
-    for conference in ("SEC", "Big Ten"):
-        if conference_team_count(source_rows, conference) < MIN_SEC_BIG_TEN_IN_FIELD:
+def build_season_h2h_by_sim(
+    game_rows: list[dict],
+    sim_cols: list[str],
+) -> tuple[
+    dict[str, dict[frozenset[str], int]],
+    dict[str, dict[tuple[str, str], int]],
+]:
+    """Per sim column: meeting counts per pair and directed win counts."""
+    h2h_wins: dict[str, dict[tuple[str, str], int]] = {
+        col: defaultdict(int) for col in sim_cols
+    }
+    h2h_games: dict[str, dict[frozenset[str], int]] = {
+        col: defaultdict(int) for col in sim_cols
+    }
+    for row in game_rows:
+        tid = (row.get("team_id") or "").strip()
+        oid = (row.get("opponent_id") or "").strip()
+        if not tid or not oid:
             continue
-        while (
-            conference_eligible_count(output_rows, source_rows, col, conference)
-            < MIN_SEC_BIG_TEN_IN_FIELD
-        ):
-            candidates = [
-                i
-                for i, src in enumerate(source_rows)
-                if src["conference"] == conference and int(output_rows[i][col]) != 1
-            ]
-            if not candidates:
-                break
-            candidates.sort(
-                key=lambda i: wins_rank_key(source_rows, col, sos_by_team_id, i),
-                reverse=True,
-            )
-            output_rows[candidates[0]][col] = 1
+        for col in sim_cols:
+            result = (row.get(col) or "").strip()
+            if result not in ("0", "1"):
+                continue
+            pair = frozenset((tid, oid))
+            h2h_games[col][pair] += 1
+            if result == "1":
+                h2h_wins[col][(tid, oid)] += 1
+    return h2h_wins, h2h_games
 
 
-def wins_rank_key(source_rows, col, sos_by_team_id, index):
-    return (
-        int(source_rows[index][col]),
-        team_sos(sos_by_team_id, source_rows[index]["team_id"]),
-        int(source_rows[index]["team_id"]),
+def sweep_dominates(
+    team_a: str,
+    team_b: str,
+    col: str,
+    h2h_wins: dict[str, dict[tuple[str, str], int]],
+    h2h_games: dict[str, dict[frozenset[str], int]],
+) -> bool:
+    """True if team_a won every meeting vs team_b in this sim."""
+    pair = frozenset((team_a, team_b))
+    games = h2h_games.get(col, {}).get(pair, 0)
+    if games <= 0:
+        return False
+    w_ab = h2h_wins.get(col, {}).get((team_a, team_b), 0)
+    w_ba = h2h_wins.get(col, {}).get((team_b, team_a), 0)
+    return w_ab > 0 and w_ba == 0 and w_ab * 2 == games
+
+
+def _has_directed_cycle_len_at_least_three(
+    team_ids: list[str],
+    edges: set[tuple[str, str]],
+) -> bool:
+    if len(team_ids) < 3:
+        return False
+    adj: dict[str, list[str]] = {tid: [] for tid in team_ids}
+    for u, v in edges:
+        if u in adj and v in adj:
+            adj[u].append(v)
+
+    visited: set[str] = set()
+
+    def dfs(node: str, path: list[str]) -> bool:
+        visited.add(node)
+        path.append(node)
+        for nxt in adj[node]:
+            if nxt not in visited:
+                if dfs(nxt, path):
+                    return True
+            elif nxt in path:
+                cycle_len = len(path) - path.index(nxt)
+                if cycle_len >= 3:
+                    return True
+        path.pop()
+        return False
+
+    for tid in team_ids:
+        if tid not in visited and dfs(tid, []):
+            return True
+    return False
+
+
+def _topological_order_by_sweep(
+    indices: list[int],
+    source_rows: list[dict],
+    col: str,
+    sos_by_team_id: dict,
+    h2h_wins: dict[str, dict[tuple[str, str], int]],
+    h2h_games: dict[str, dict[frozenset[str], int]],
+) -> list[int]:
+    sos_order = sorted(indices, key=lambda i: sos_rank_key(source_rows, sos_by_team_id, i), reverse=True)
+    position = {idx: pos for pos, idx in enumerate(sos_order)}
+    tids = [source_rows[i]["team_id"] for i in indices]
+    edges: set[tuple[str, str]] = set()
+    for a in tids:
+        for b in tids:
+            if a != b and sweep_dominates(a, b, col, h2h_wins, h2h_games):
+                edges.add((a, b))
+    if _has_directed_cycle_len_at_least_three(tids, edges):
+        return sos_order
+
+    in_degree = {tid: 0 for tid in tids}
+    for u, v in edges:
+        in_degree[v] += 1
+
+    tid_to_index = {source_rows[i]["team_id"]: i for i in indices}
+    ready = sorted(
+        [tid for tid in tids if in_degree[tid] == 0],
+        key=lambda tid: position[tid_to_index[tid]],
     )
+    ordered_tids: list[str] = []
+    while ready:
+        tid = ready.pop(0)
+        ordered_tids.append(tid)
+        for v in adjacency_from_edges(tids, edges).get(tid, []):
+            in_degree[v] -= 1
+            if in_degree[v] == 0:
+                ready.append(v)
+                ready.sort(key=lambda t: position[tid_to_index[t]])
+    if len(ordered_tids) != len(tids):
+        return sos_order
+    return [tid_to_index[tid] for tid in ordered_tids]
 
 
-def add_top_n_by_conference(
-    output_rows, source_rows, col, conference, n, sos_by_team_id
-):
-    """Rules 4-5: top N by wins among teams not already in the field."""
-    candidates = [
+def adjacency_from_edges(
+    team_ids: list[str], edges: set[tuple[str, str]]
+) -> dict[str, list[str]]:
+    adj: dict[str, list[str]] = {tid: [] for tid in team_ids}
+    for u, v in edges:
+        adj[u].append(v)
+    return adj
+
+
+def apply_conf_champion_boost_within_bucket(
+    ordered_indices: list[int],
+    source_rows: list[dict],
+    col: str,
+    conf_champions_by_sim: dict,
+) -> list[int]:
+    """Rule D: conf champ above same-conference, same-win non-champs in bucket."""
+    if not ordered_indices:
+        return ordered_indices
+    col_champs = conf_champions_by_sim.get(col, {})
+    order_pos = {i: pos for pos, i in enumerate(ordered_indices)}
+    by_conf: dict[str, list[int]] = defaultdict(list)
+    for i in ordered_indices:
+        by_conf[source_rows[i]["conference"]].append(i)
+
+    boosted: dict[str, list[int]] = {}
+    for conf, members in by_conf.items():
+        members_sorted = sorted(members, key=lambda j: order_pos[j])
+        if len(members_sorted) < 2:
+            boosted[conf] = members_sorted
+            continue
+        champ_tid = col_champs.get(conf)
+        champs = [
+            j
+            for j in members_sorted
+            if champ_tid and source_rows[j]["team_id"] == champ_tid
+        ]
+        if len(champs) == 1:
+            champ_i = champs[0]
+            rest = [j for j in members_sorted if j != champ_i]
+            boosted[conf] = [champ_i] + rest
+        else:
+            boosted[conf] = members_sorted
+
+    result: list[int] = []
+    placed: set[int] = set()
+    for i in ordered_indices:
+        conf = source_rows[i]["conference"]
+        if i in placed:
+            continue
+        for j in boosted[conf]:
+            if j not in placed:
+                result.append(j)
+                placed.add(j)
+    return result
+
+
+def rank_at_large_candidates(
+    source_rows: list[dict],
+    col: str,
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins: dict[str, dict[tuple[str, str], int]] | None = None,
+    h2h_games: dict[str, dict[frozenset[str], int]] | None = None,
+) -> list[int]:
+    """Rules 3A-D: row indices best-first for at-large selection."""
+    h2h_wins = h2h_wins or {}
+    h2h_games = h2h_games or {}
+    all_indices = [
         i
         for i, src in enumerate(source_rows)
-        if src["conference"] == conference and int(output_rows[i][col]) != 1
+        if not is_placeholder_team(src)
+        and src["conference"] not in GROUP_CONFERENCES
     ]
-    candidates.sort(
-        key=lambda i: wins_rank_key(source_rows, col, sos_by_team_id, i),
-        reverse=True,
-    )
-    for i in candidates[:n]:
-        output_rows[i][col] = 1
+    by_wins: dict[int, list[int]] = defaultdict(list)
+    for i in all_indices:
+        by_wins[int(source_rows[i][col])].append(i)
 
-
-def add_all_p4_twelve_win(output_rows, source_rows, col):
-    """Rule 6: all Power Four teams with >= 12 wins."""
-    for i, src in enumerate(source_rows):
-        if (
-            src["conference"] in POWER_FOUR
-            and int(src[col]) >= 12
-            and int(output_rows[i][col]) != 1
-        ):
-            output_rows[i][col] = 1
-
-
-def tier_matches(src, col, tier_conf, min_wins):
-    wins = int(src[col])
-    if wins < min_wins:
-        return False
-    if tier_conf is None:
-        return True
-    if isinstance(tier_conf, set):
-        if tier_conf == ACC_BIG_12:
-            return is_acc_big12_or_notre_dame(src)
-        return src["conference"] in tier_conf
-    return src["conference"] == tier_conf
-
-
-def fill_win_tiers_col(output_rows, source_rows, col, sos_by_team_id):
-    """Fill tiers in order; stop at 12 before advancing to the next tier."""
-    for tier_conf, min_wins in FILL_TIERS:
-        if eligibility_count(output_rows, col) >= 12:
-            break
-        while eligibility_count(output_rows, col) < 12:
-            candidates = [
-                i
-                for i, src in enumerate(source_rows)
-                if tier_matches(src, col, tier_conf, min_wins)
-                and int(output_rows[i][col]) != 1
-            ]
-            if not candidates:
-                break
-            pick = max(
-                candidates,
-                key=lambda i: wins_rank_key(source_rows, col, sos_by_team_id, i),
-            )
-            output_rows[pick][col] = 1
-
-
-def team_sim_fpi_for_rank(sim_fpi_by_team_id, team_id, col):
-    raw = (sim_fpi_by_team_id.get(team_id) or {}).get(col)
-    if raw is None:
-        return float("-inf")
-    return float(raw)
-
-
-def fill_by_fpi_col(output_rows, source_rows, col, sim_fpi_by_team_id):
-    """FPI backfill: any team, highest per-sim FPI."""
-    while eligibility_count(output_rows, col) < 12:
-        candidates = [
-            i for i in range(len(source_rows)) if int(output_rows[i][col]) != 1
-        ]
-        if not candidates:
-            break
-        pick = max(
-            candidates,
-            key=lambda i: (
-                team_sim_fpi_for_rank(
-                    sim_fpi_by_team_id, source_rows[i]["team_id"], col
-                ),
-                int(source_rows[i][col]),
-                int(source_rows[i]["team_id"]),
-            ),
+    ranked: list[int] = []
+    for wins in sorted(by_wins.keys(), reverse=True):
+        bucket = by_wins[wins]
+        sos_sorted = sorted(
+            bucket, key=lambda i: sos_rank_key(source_rows, sos_by_team_id, i), reverse=True
         )
-        output_rows[pick][col] = 1
+        if h2h_wins.get(col) and h2h_games.get(col):
+            ordered = _topological_order_by_sweep(
+                bucket, source_rows, col, sos_by_team_id, h2h_wins, h2h_games
+            )
+        else:
+            ordered = sos_sorted
+        ordered = apply_conf_champion_boost_within_bucket(
+            ordered, source_rows, col, conf_champions_by_sim
+        )
+        ranked.extend(ordered)
+    return ranked
 
 
-def trim_overflow_col(
+def elig_by_team_id_for_col(elig_rows: list[dict], col: str) -> dict[str, int]:
+    return {
+        (row.get("team_id") or "").strip(): int(row[col])
+        for row in elig_rows
+        if (row.get("team_id") or "").strip()
+    }
+
+
+def seed_playoff_indices_col(
+    source_rows: list[dict],
+    col: str,
+    elig_by_team_id: dict[str, int],
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
+) -> list[int] | None:
+    """Return row indices in playoff seed order (1..12); G6 autobid is always seed 12."""
+    eligible = [
+        i
+        for i, src in enumerate(source_rows)
+        if elig_by_team_id.get(src["team_id"], 0) == 1
+        and not is_placeholder_team(src)
+    ]
+    if len(eligible) != PLAYOFF_FIELD_SIZE:
+        return None
+
+    g6_indices = [
+        i for i in eligible if source_rows[i]["conference"] in GROUP_CONFERENCES
+    ]
+    if len(g6_indices) != 1:
+        return None
+    g6_i = g6_indices[0]
+    eligible_non_g6 = {i for i in eligible if i != g6_i}
+
+    ranked = rank_at_large_candidates(
+        source_rows,
+        col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+    )
+    seed_indices: list[int] = []
+    for i in ranked:
+        if i in eligible_non_g6:
+            seed_indices.append(i)
+    for i in eligible:
+        if i != g6_i and i not in seed_indices:
+            seed_indices.append(i)
+    if len(seed_indices) != PLAYOFF_FIELD_SIZE - 1:
+        return None
+    seed_indices.append(g6_i)
+    return seed_indices
+
+
+def seed_playoff_field_col(
+    source_rows: list[dict],
+    col: str,
+    elig_by_team_id: dict[str, int],
+    sim_fpi_for_col: dict[str, float],
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
+) -> list[tuple[str, str, float]] | None:
+    """Seeded field as (team_name, conference, sim_fpi) for bracket simulation."""
+    indices = seed_playoff_indices_col(
+        source_rows,
+        col,
+        elig_by_team_id,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+    )
+    if not indices:
+        return None
+    seeded: list[tuple[str, str, float]] = []
+    for i in indices:
+        src = source_rows[i]
+        name = (src.get("team_name") or "").strip()
+        if not name or name == "TBD" or name not in sim_fpi_for_col:
+            return None
+        seeded.append((name, src.get("conference", ""), sim_fpi_for_col[name]))
+    return seeded
+
+
+def apply_at_large_bids_col(
     output_rows,
     source_rows,
     col,
     sos_by_team_id,
-    conf_champion_indices,
-    protected_rule_123,
+    conf_champions_by_sim,
+    h2h_wins_by_col,
+    h2h_games_by_col,
+    n_bids: int = AT_LARGE_BIDS,
 ):
-    """Trim to 12 using SOS-priority categories, then random for unprotected teams."""
-
-    def is_p4_champion(i):
-        return i in conf_champion_indices
-
-    def trim_pick(candidates):
-        return min(
-            candidates,
-            key=lambda i: (
-                team_sos(sos_by_team_id, source_rows[i]["team_id"]),
-                int(source_rows[i]["team_id"]),
-            ),
-        )
-
-    while eligibility_count(output_rows, col) > 12:
-        removed = False
-        wins = lambda i: int(source_rows[i][col])
-        conf = lambda i: source_rows[i]["conference"]
-        eligible = [
-            i for i in range(len(source_rows)) if int(output_rows[i][col]) == 1
-        ]
-
-        # 1. Big Ten non-champion with exactly 9 wins
-        pool = removable_for_trim(
-            output_rows,
-            source_rows,
-            col,
-            [
-                i
-                for i in eligible
-                if conf(i) == "Big Ten"
-                and not is_p4_champion(i)
-                and wins(i) == 9
-            ],
-        )
-        if pool:
-            output_rows[trim_pick(pool)][col] = 0
-            removed = True
-        if removed:
-            continue
-
-        # 2. SEC non-champion with exactly 9 wins
-        pool = removable_for_trim(
-            output_rows,
-            source_rows,
-            col,
-            [
-                i
-                for i in eligible
-                if conf(i) == "SEC" and not is_p4_champion(i) and wins(i) == 9
-            ],
-        )
-        if pool:
-            output_rows[trim_pick(pool)][col] = 0
-            removed = True
-        if removed:
-            continue
-
-        # 3. ACC or Big 12 (or Notre Dame) non-champion with exactly 10 wins
-        pool = removable_for_trim(
-            output_rows,
-            source_rows,
-            col,
-            [
-                i
-                for i in eligible
-                if is_acc_big12_or_notre_dame(source_rows[i])
-                and not is_p4_champion(i)
-                and wins(i) == 10
-            ],
-        )
-        if pool:
-            output_rows[trim_pick(pool)][col] = 0
-            removed = True
-        if removed:
-            continue
-
-        # 4. SEC or Big Ten non-champion with exactly 10 wins
-        pool = removable_for_trim(
-            output_rows,
-            source_rows,
-            col,
-            [
-                i
-                for i in eligible
-                if conf(i) in SEC_BIG_TEN
-                and not is_p4_champion(i)
-                and wins(i) == 10
-            ],
-        )
-        if pool:
-            output_rows[trim_pick(pool)][col] = 0
-            removed = True
-        if removed:
-            continue
-
-        # 5. Random among teams not protected by rules 1-3
-        pool = removable_for_trim(
-            output_rows,
-            source_rows,
-            col,
-            [i for i in eligible if i not in protected_rule_123],
-        )
-        if pool:
-            rng = random.Random(sim_col_seed(col))
-            pick = rng.choice(pool)
-            output_rows[pick][col] = 0
-            removed = True
-        if removed:
-            continue
-
-        count = eligibility_count(output_rows, col)
-        raise RuntimeError(
-            f"Cannot trim {col} to 12: {count} teams eligible but no removable "
-            "candidate matches overflow trim categories"
-        )
-
-
-def rule_123_protected_indices(
-    output_rows, source_rows, col, conf_champions_by_sim, sim_fpi_by_team_id
-):
-    """Indices locked by rules 1-3 (P4 champs, ND >=11, G6 autobid)."""
-    protected = set(
-        power_four_conf_champion_indices(source_rows, col, conf_champions_by_sim)
+    ranked = rank_at_large_candidates(
+        source_rows,
+        col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
     )
-    nd_i = notre_dame_index(source_rows)
-    if nd_i is not None and int(source_rows[nd_i][col]) >= 11:
-        protected.add(nd_i)
-    g6_i = g6_autobid_index(output_rows, source_rows, col)
-    if g6_i is not None:
-        protected.add(g6_i)
-    return protected
+    added = 0
+    for i in ranked:
+        if added >= n_bids:
+            break
+        if int(output_rows[i][col]) != 1:
+            output_rows[i][col] = 1
+            added += 1
 
 
 def compute_column_eligibility(
@@ -490,94 +525,32 @@ def compute_column_eligibility(
     sos_by_team_id,
     conf_champions_by_sim,
     g6_points_by_team_id,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
 ):
-    fpi = sim_fpi_by_team_id or {}
+    _ = sim_fpi_by_team_id  # retained for API compatibility
     g6_pts = g6_points_by_team_id or {}
+    h2h_w = h2h_wins_by_col or {}
+    h2h_g = h2h_games_by_col or {}
 
-    # Rule 1: Power Four conference champions
+    for i in range(len(output_rows)):
+        output_rows[i][col] = 0
+
     apply_power_four_conf_champions_col(
         output_rows, source_rows, col, conf_champions_by_sim
     )
-
-    # Rule 2: Notre Dame >= 11 wins
-    apply_notre_dame_rule_col(output_rows, source_rows, col)
-
-    # Rule 3: Group of 6 autobid (playoff points)
     apply_g6_autobid_col(
         output_rows, source_rows, col, g6_pts, sos_by_team_id
     )
-
-    # Rules 4-5: top 2 SEC / Big Ten not already in field
-    add_top_n_by_conference(output_rows, source_rows, col, "SEC", 2, sos_by_team_id)
-    add_top_n_by_conference(
-        output_rows, source_rows, col, "Big Ten", 2, sos_by_team_id
+    apply_at_large_bids_col(
+        output_rows,
+        source_rows,
+        col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_w,
+        h2h_g,
     )
-
-    # Rule 6: Power Four teams with >= 12 wins
-    add_all_p4_twelve_win(output_rows, source_rows, col)
-
-    # Win-tier fill (stop at 12 between tiers)
-    if eligibility_count(output_rows, col) < 12:
-        fill_win_tiers_col(output_rows, source_rows, col, sos_by_team_id)
-
-    # FPI backfill
-    if eligibility_count(output_rows, col) < 12:
-        fill_by_fpi_col(output_rows, source_rows, col, fpi)
-
-    # Overflow trim
-    if eligibility_count(output_rows, col) > 12:
-        champs = power_four_conf_champion_indices(
-            source_rows, col, conf_champions_by_sim
-        )
-        protected = rule_123_protected_indices(
-            output_rows, source_rows, col, conf_champions_by_sim, fpi
-        )
-        trim_overflow_col(
-            output_rows,
-            source_rows,
-            col,
-            sos_by_team_id,
-            champs,
-            protected,
-        )
-
-    # Re-lock rules 1-3 (clear G6 flags before re-selecting autobid)
-    apply_power_four_conf_champions_col(
-        output_rows, source_rows, col, conf_champions_by_sim
-    )
-    apply_notre_dame_rule_col(output_rows, source_rows, col)
-    apply_g6_autobid_col(
-        output_rows, source_rows, col, g6_pts, sos_by_team_id
-    )
-
-    # Re-apply rules 4-5 after trim/re-lock so SEC/Big Ten slots are restored.
-    add_top_n_by_conference(output_rows, source_rows, col, "SEC", 2, sos_by_team_id)
-    add_top_n_by_conference(
-        output_rows, source_rows, col, "Big Ten", 2, sos_by_team_id
-    )
-
-    if eligibility_count(output_rows, col) < 12:
-        fill_win_tiers_col(output_rows, source_rows, col, sos_by_team_id)
-    if eligibility_count(output_rows, col) < 12:
-        fill_by_fpi_col(output_rows, source_rows, col, fpi)
-
-    enforce_sec_big_ten_floor(output_rows, source_rows, col, sos_by_team_id)
-
-    if eligibility_count(output_rows, col) > 12:
-        champs = power_four_conf_champion_indices(
-            source_rows, col, conf_champions_by_sim
-        )
-        protected = rule_123_protected_indices(
-            output_rows, source_rows, col, conf_champions_by_sim, fpi
-        )
-        trim_overflow_col(
-            output_rows,
-            source_rows,
-            col,
-            sos_by_team_id,
-            champs,
-            protected,
-        )
 
 
 def load_sim_fpi_by_team_id(path):
@@ -601,6 +574,13 @@ def load_sim_fpi_by_team_id(path):
     return sim_fpi
 
 
+def load_game_rows_for_h2h(games_sim_path: Path) -> tuple[list[dict], list[str]]:
+    with games_sim_path.open(newline="", encoding="utf-8-sig") as infile:
+        reader = csv.DictReader(infile)
+        sim_cols = sim_columns(reader.fieldnames or [])
+        return list(reader), sim_cols
+
+
 def compute_playoff_eligibility(
     rows,
     fieldnames,
@@ -608,6 +588,8 @@ def compute_playoff_eligibility(
     conf_champions_by_sim=None,
     sos_by_team_id=None,
     g6_points_by_team_id=None,
+    h2h_wins_by_col=None,
+    h2h_games_by_col=None,
 ):
     sim_cols = sim_columns(fieldnames)
     if conf_champions_by_sim is None:
@@ -633,6 +615,8 @@ def compute_playoff_eligibility(
             sos_by_team_id,
             conf_champions_by_sim,
             g6_points_by_team_id,
+            h2h_wins_by_col,
+            h2h_games_by_col,
         )
 
     return output_rows
@@ -662,6 +646,15 @@ def write_playoff_eligibility(
         games_fpi_path = Path(games_fpi_path)
         sim_fpi_by_team_id = load_sim_fpi_by_team_id(games_fpi_path)
         sos_by_team_id = load_sos_by_team_id(games_fpi_path)
+
+    h2h_wins_by_col = None
+    h2h_games_by_col = None
+    if games_sim_path and Path(games_sim_path).is_file():
+        game_rows, sim_cols_h2h = load_game_rows_for_h2h(Path(games_sim_path))
+        if sim_cols_h2h:
+            h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
+                game_rows, sim_cols_h2h
+            )
 
     if conf_champions_by_sim is None and games_sim_path and games_fpi_path and conf_path:
         from cfb_conf_championship import compute_conf_results_by_sim
@@ -697,6 +690,8 @@ def write_playoff_eligibility(
         conf_champions_by_sim,
         sos_by_team_id,
         g6_points_by_team_id,
+        h2h_wins_by_col,
+        h2h_games_by_col,
     )
 
     with output_path.open("w", newline="", encoding="utf-8-sig") as outfile:
