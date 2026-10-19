@@ -4,8 +4,8 @@
 Selection (12-team field per simulation):
   1. Power Four conference champions autobid
   2. Group of 6 team with highest playoff points autobid
-  3. Rank remaining teams: actual win total, then within that tier all non-ACC
-     teams above ACC teams (0.5-win penalty), then SOS, H2H sweeps
+  3. Rank remaining teams: wins (ACC teams count as 0.5 fewer for ranking),
+     then SOS within win tier, then H2H sweeps
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
   4. Top 7 ranked teams not already in the field (Group of 6 teams
      excluded from at-large; G6 access is autobid only)
@@ -37,7 +37,7 @@ GROUP_CONFERENCES = {
 
 AT_LARGE_BIDS = 7
 PLAYOFF_FIELD_SIZE = 12
-ACC_CONFERENCE = "ACC"
+ACC_RANKING_WIN_PENALTY = 0.5
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 PLACEHOLDER_TEAM_IDS = frozenset({"-1", "-2"})
@@ -100,26 +100,12 @@ def team_sos(sos_by_team_id, team_id):
     return float(sos_by_team_id.get(team_id, float("-inf")))
 
 
-def is_acc_team(row: dict) -> bool:
-    return (row.get("conference") or "").strip() == ACC_CONFERENCE
-
-
-def at_large_win_bucket(row: dict, col: str) -> int:
-    """Integer wins for the first at-large ranking tier."""
-    return int((row.get(col) or "0").strip() or 0)
-
-
-def acc_ranking_tiebreaker(row: dict) -> int:
-    """Within a win tier, ACC teams sort after peers (equivalent to −0.5 wins)."""
-    return 1 if is_acc_team(row) else 0
-
-
-def within_bucket_rank_key(
-    index: int, source_rows: list[dict], col: str, sos_by_team_id: dict
-) -> tuple[int, float, int]:
-    row = source_rows[index]
-    sos, tid = sos_rank_key(source_rows, sos_by_team_id, index)
-    return (acc_ranking_tiebreaker(row), -sos, -tid)
+def ranking_wins_for_selection(row: dict, col: str) -> float:
+    """Wins used for at-large ranking and seeding (ACC: −0.5 vs actual record)."""
+    wins = int((row.get(col) or "0").strip() or 0)
+    if (row.get("conference") or "").strip() == "ACC":
+        return wins - ACC_RANKING_WIN_PENALTY
+    return float(wins)
 
 
 def winningest_in_conference(source_rows, col, conference):
@@ -296,10 +282,7 @@ def _topological_order_by_sweep(
     h2h_wins: dict[str, dict[tuple[str, str], int]],
     h2h_games: dict[str, dict[frozenset[str], int]],
 ) -> list[int]:
-    sos_order = sorted(
-        indices,
-        key=lambda i: within_bucket_rank_key(i, source_rows, col, sos_by_team_id),
-    )
+    sos_order = sorted(indices, key=lambda i: sos_rank_key(source_rows, sos_by_team_id, i), reverse=True)
     position = {idx: pos for pos, idx in enumerate(sos_order)}
     tids = [source_rows[i]["team_id"] for i in indices]
     edges: set[tuple[str, str]] = set()
@@ -406,16 +389,15 @@ def rank_at_large_candidates(
         if not is_placeholder_team(src)
         and src["conference"] not in GROUP_CONFERENCES
     ]
-    by_wins: dict[int, list[int]] = defaultdict(list)
+    by_wins: dict[float, list[int]] = defaultdict(list)
     for i in all_indices:
-        by_wins[at_large_win_bucket(source_rows[i], col)].append(i)
+        by_wins[ranking_wins_for_selection(source_rows[i], col)].append(i)
 
     ranked: list[int] = []
     for wins in sorted(by_wins.keys(), reverse=True):
         bucket = by_wins[wins]
         sos_sorted = sorted(
-            bucket,
-            key=lambda i: within_bucket_rank_key(i, source_rows, col, sos_by_team_id),
+            bucket, key=lambda i: sos_rank_key(source_rows, sos_by_team_id, i), reverse=True
         )
         if h2h_wins.get(col) and h2h_games.get(col):
             ordered = _topological_order_by_sweep(

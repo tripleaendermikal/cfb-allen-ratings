@@ -19,8 +19,7 @@ from cfb_playoff_elig import (
     elig_by_team_id_for_col,
     eligibility_count,
     rank_at_large_candidates,
-    acc_ranking_tiebreaker,
-    at_large_win_bucket,
+    ranking_wins_for_selection,
     seed_playoff_indices_col,
 )
 
@@ -170,33 +169,27 @@ class TestPlayoffEligibility(unittest.TestCase):
         self.assertEqual(ranked[2], 2)
 
     def test_acc_ranking_win_penalty(self):
-        acc_10 = {
+        acc = {
             "team_id": "1",
             "team_name": "ACC",
             "conference": "ACC",
-            "sim_0001": "10",
+            "sim_0001": "11",
         }
-        sec_10 = {
+        sec = {
             "team_id": "2",
             "team_name": "SEC",
             "conference": "SEC",
             "sim_0001": "10",
         }
-        self.assertEqual(at_large_win_bucket(acc_10, "sim_0001"), 10)
-        self.assertEqual(acc_ranking_tiebreaker(acc_10), 1)
-        self.assertEqual(acc_ranking_tiebreaker(sec_10), 0)
+        self.assertEqual(ranking_wins_for_selection(acc, "sim_0001"), 10.5)
+        self.assertEqual(ranking_wins_for_selection(sec, "sim_0001"), 10.0)
         ranked = rank_at_large_candidates(
-            [acc_10, sec_10], "sim_0001", {"1": 5.0, "2": 0.0}, {"sim_0001": {}}
+            [acc, sec], "sim_0001", {"1": 0.0, "2": 0.0}, {"sim_0001": {}}
         )
-        self.assertEqual(ranked[0], 1)
-        acc_11 = {**acc_10, "sim_0001": "11"}
-        ranked_higher_wins = rank_at_large_candidates(
-            [acc_11, sec_10], "sim_0001", {"1": 0.0, "2": 0.0}, {"sim_0001": {}}
-        )
-        self.assertEqual(ranked_higher_wins[0], 0)
-        ranked_same_wins = rank_at_large_candidates(
+        self.assertEqual(ranked[0], 0)
+        ranked2 = rank_at_large_candidates(
             [
-                acc_11,
+                acc,
                 {
                     "team_id": "3",
                     "team_name": "SEC2",
@@ -208,7 +201,7 @@ class TestPlayoffEligibility(unittest.TestCase):
             {"1": 0.0, "3": 0.0},
             {"sim_0001": {}},
         )
-        self.assertEqual(ranked_same_wins[0], 1)
+        self.assertEqual(ranked2[0], 1)
 
     def test_h2h_sweep_moves_team_up(self):
         source = [
