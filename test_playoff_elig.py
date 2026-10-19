@@ -169,39 +169,44 @@ class TestPlayoffEligibility(unittest.TestCase):
         self.assertEqual(ranked[2], 2)
 
     def test_acc_ranking_win_penalty(self):
-        acc = {
+        acc_10 = {
             "team_id": "1",
             "team_name": "ACC",
             "conference": "ACC",
-            "sim_0001": "11",
+            "sim_0001": "10",
         }
-        sec = {
+        sec_10 = {
             "team_id": "2",
             "team_name": "SEC",
             "conference": "SEC",
             "sim_0001": "10",
         }
-        self.assertEqual(ranking_wins_for_selection(acc, "sim_0001"), 10.5)
-        self.assertEqual(ranking_wins_for_selection(sec, "sim_0001"), 10.0)
+        self.assertEqual(ranking_wins_for_selection(acc_10, "sim_0001"), 9.0)
+        self.assertEqual(ranking_wins_for_selection(sec_10, "sim_0001"), 10.0)
         ranked = rank_at_large_candidates(
-            [acc, sec], "sim_0001", {"1": 0.0, "2": 0.0}, {"sim_0001": {}}
+            [acc_10, sec_10], "sim_0001", {"1": 5.0, "2": 0.0}, {"sim_0001": {}}
         )
-        self.assertEqual(ranked[0], 0)
-        ranked2 = rank_at_large_candidates(
+        self.assertEqual(ranked[0], 1)
+        acc_12 = {**acc_10, "sim_0001": "12"}
+        ranked_higher = rank_at_large_candidates(
+            [acc_12, sec_10], "sim_0001", {"1": 0.0, "2": 0.0}, {"sim_0001": {}}
+        )
+        self.assertEqual(ranked_higher[0], 0)
+        ranked_same_tier = rank_at_large_candidates(
             [
-                acc,
+                {**acc_10, "sim_0001": "11"},
                 {
                     "team_id": "3",
                     "team_name": "SEC2",
                     "conference": "SEC",
-                    "sim_0001": "11",
+                    "sim_0001": "10",
                 },
             ],
             "sim_0001",
-            {"1": 0.0, "3": 0.0},
+            {"1": 0.0, "3": 5.0},
             {"sim_0001": {}},
         )
-        self.assertEqual(ranked2[0], 1)
+        self.assertEqual(ranked_same_tier[0], 1)
 
     def test_h2h_sweep_moves_team_up(self):
         source = [

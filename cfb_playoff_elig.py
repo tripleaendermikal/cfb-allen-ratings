@@ -4,7 +4,7 @@
 Selection (12-team field per simulation):
   1. Power Four conference champions autobid
   2. Group of 6 team with highest playoff points autobid
-  3. Rank remaining teams: wins (ACC teams count as 0.5 fewer for ranking),
+  3. Rank remaining teams: wins (ACC teams count as 1 fewer for ranking),
      then SOS within win tier, then H2H sweeps
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
   4. Top 7 ranked teams not already in the field (Group of 6 teams
@@ -37,7 +37,7 @@ GROUP_CONFERENCES = {
 
 AT_LARGE_BIDS = 7
 PLAYOFF_FIELD_SIZE = 12
-ACC_RANKING_WIN_PENALTY = 0.5
+ACC_RANKING_WIN_PENALTY = 1.0
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 PLACEHOLDER_TEAM_IDS = frozenset({"-1", "-2"})
@@ -101,7 +101,7 @@ def team_sos(sos_by_team_id, team_id):
 
 
 def ranking_wins_for_selection(row: dict, col: str) -> float:
-    """Wins used for at-large ranking and seeding (ACC: −0.5 vs actual record)."""
+    """Wins used for at-large ranking and seeding (ACC: −1 vs actual record)."""
     wins = int((row.get(col) or "0").strip() or 0)
     if (row.get("conference") or "").strip() == "ACC":
         return wins - ACC_RANKING_WIN_PENALTY
