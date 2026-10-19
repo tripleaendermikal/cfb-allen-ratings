@@ -4,7 +4,8 @@
 Selection (12-team field per simulation):
   1. Power Four conference champions autobid
   2. Group of 6 team with highest playoff points autobid
-  3. Rank remaining teams: wins, then SOS within win tier, then H2H sweeps
+  3. Rank remaining teams: wins (ACC teams count as 0.5 fewer for ranking),
+     then SOS within win tier, then H2H sweeps
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
   4. Top 7 ranked teams not already in the field (Group of 6 teams
      excluded from at-large; G6 access is autobid only)
@@ -36,6 +37,7 @@ GROUP_CONFERENCES = {
 
 AT_LARGE_BIDS = 7
 PLAYOFF_FIELD_SIZE = 12
+ACC_RANKING_WIN_PENALTY = 0.5
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 PLACEHOLDER_TEAM_IDS = frozenset({"-1", "-2"})
@@ -96,6 +98,14 @@ def load_sos_by_team_id(path):
 
 def team_sos(sos_by_team_id, team_id):
     return float(sos_by_team_id.get(team_id, float("-inf")))
+
+
+def ranking_wins_for_selection(row: dict, col: str) -> float:
+    """Wins used for at-large ranking and seeding (ACC: −0.5 vs actual record)."""
+    wins = int((row.get(col) or "0").strip() or 0)
+    if (row.get("conference") or "").strip() == "ACC":
+        return wins - ACC_RANKING_WIN_PENALTY
+    return float(wins)
 
 
 def winningest_in_conference(source_rows, col, conference):
@@ -379,9 +389,9 @@ def rank_at_large_candidates(
         if not is_placeholder_team(src)
         and src["conference"] not in GROUP_CONFERENCES
     ]
-    by_wins: dict[int, list[int]] = defaultdict(list)
+    by_wins: dict[float, list[int]] = defaultdict(list)
     for i in all_indices:
-        by_wins[int(source_rows[i][col])].append(i)
+        by_wins[ranking_wins_for_selection(source_rows[i], col)].append(i)
 
     ranked: list[int] = []
     for wins in sorted(by_wins.keys(), reverse=True):
