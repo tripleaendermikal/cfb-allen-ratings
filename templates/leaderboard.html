@@ -76,12 +76,14 @@
         <span class="badge" style="background:{{ row.conference | conf_color }}">{{ row.conference }}</span>
         {% endif %}
       </td>
+      {% if ranking_mode not in ('resume', 'forecast_resume') %}
       <td class="num" data-value="{{ row.rank_delta or 0 }}">
         {% set d = row.rank_delta or 0 %}
         {% if d > 0 %}<span class="rank-up">▲{{ d }}</span>
         {% elif d < 0 %}<span class="rank-down">▼{{ d|abs }}</span>
         {% else %}—{% endif %}
       </td>
+      {% endif %}
       {% if ranking_mode == 'resume' %}
       <td class="num" data-value="{{ row.resume_margin if row.resume_margin is not none else '' }}">
         {% if row.resume_margin is not none %}{{ "%+.1f"|format(row.resume_margin) }}{% else %}—{% endif %}
