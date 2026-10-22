@@ -23,7 +23,12 @@ import export_sim_data as esd  # noqa: E402
 from cfb_conf_championship import compute_conf_results_by_sim  # noqa: E402
 from cfb_in_season_sim import is_completed, parse_score  # noqa: E402
 from cfb_playoff_elig import build_season_h2h_by_sim, load_sos_by_team_id  # noqa: E402
+from cfb_rating.forecast_resume_enrich import (  # noqa: E402
+    enrich_rankings_json_forecast_resume,
+    projected_wins_from_sim_records,
+)
 from cfb_rating.in_season import compute_overall_margin  # noqa: E402
+from cfb_rating.season_data import load_games_for_in_season_rankings  # noqa: E402
 
 IN_SEASON_PREFIX = "cfb_2026_in_season"
 
@@ -146,6 +151,9 @@ def load_weekly_rankings(path: Path) -> dict:
                     else None,
                     "resume_margin": float(row["resume_margin"])
                     if (row.get("resume_margin") or "").strip()
+                    else None,
+                    "forecast_resume_margin": float(row["forecast_resume_margin"])
+                    if (row.get("forecast_resume_margin") or "").strip()
                     else None,
                     "preseason_margin": float(row["preseason_margin"])
                     if (row.get("preseason_margin") or "").strip()
@@ -328,6 +336,16 @@ def main() -> int:
     esd.enrich_leaderboard_fpi(leaderboard, baseline_by_id, conf_by_id)
 
     rankings = load_weekly_rankings(SOURCES["rankings"])
+    projected_wins_by_team = projected_wins_from_sim_records(records_rows, sim_cols)
+    if SOURCES["games_base"].is_file() and projected_wins_by_team:
+        games_for_resume = load_games_for_in_season_rankings(
+            SOURCES["games_base"], fbs_only=True
+        )
+        enrich_rankings_json_forecast_resume(
+            rankings,
+            games_for_resume,
+            projected_wins_by_team,
+        )
     records: dict[str, dict[str, int]] = {}
     current_week = rankings.get("current_week") or 0
     if SOURCES["games_base"].is_file():

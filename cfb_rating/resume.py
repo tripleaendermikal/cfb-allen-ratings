@@ -10,10 +10,16 @@ from cfb_rating.win_prob import team_win_probability
 RESUME_STEP = 0.01
 MAX_RESUME_ITERATIONS = 1000
 WIN_PCT_TOLERANCE = 0.01
+FORECAST_SEASON_GAMES = 12
 
 
 def bayesian_win_pct(wins: int, games: int) -> float:
     return (wins + 1) / (games + 2)
+
+
+def forecast_target_win_pct(projected_wins: float) -> float:
+    """Season projected wins as a win rate (12-game regular season)."""
+    return projected_wins / FORECAST_SEASON_GAMES
 
 
 def team_record_from_games(
@@ -77,6 +83,32 @@ def expected_win_pct(
     return sum(probs) / len(probs)
 
 
+def calibrate_resume_to_target(
+    team_id: str,
+    overall_margin: float,
+    target_win_pct: float,
+    overall_by_team: Mapping[str, float],
+    week_games: Sequence[GameRecord],
+) -> float:
+    team_games = [
+        g for g in week_games if team_id in (g.home_team_id, g.away_team_id)
+    ]
+    if not team_games:
+        return overall_margin
+
+    resume = overall_margin
+    for _ in range(MAX_RESUME_ITERATIONS):
+        expected = expected_win_pct(team_id, resume, overall_by_team, team_games)
+        if abs(expected - target_win_pct) <= WIN_PCT_TOLERANCE:
+            break
+        if expected > target_win_pct:
+            resume -= RESUME_STEP
+        else:
+            resume += RESUME_STEP
+
+    return resume
+
+
 def calibrate_resume_rating(
     team_id: str,
     overall_margin: float,
@@ -89,21 +121,13 @@ def calibrate_resume_rating(
         return overall_margin
 
     target = bayesian_win_pct(wins, games_played)
-    resume = overall_margin
-    team_games = [
-        g for g in week_games if team_id in (g.home_team_id, g.away_team_id)
-    ]
-
-    for _ in range(MAX_RESUME_ITERATIONS):
-        expected = expected_win_pct(team_id, resume, overall_by_team, team_games)
-        if abs(expected - target) <= WIN_PCT_TOLERANCE:
-            break
-        if expected > target:
-            resume -= RESUME_STEP
-        else:
-            resume += RESUME_STEP
-
-    return resume
+    return calibrate_resume_to_target(
+        team_id,
+        overall_margin,
+        target,
+        overall_by_team,
+        week_games,
+    )
 
 
 def compute_resume_margins(
@@ -120,6 +144,37 @@ def compute_resume_margins(
             overall,
             wins,
             gp,
+            overall_by_team,
+            week_games,
+        )
+    return out
+
+
+def compute_forecast_resume_margins(
+    team_ids: Sequence[str],
+    week_games: Sequence[GameRecord],
+    overall_by_team: Mapping[str, float],
+    projected_wins_by_team: Mapping[str, float],
+) -> dict[str, float]:
+    """Resume calibration with target win% = projected season wins / 12."""
+    out: dict[str, float] = {}
+    for team_id in team_ids:
+        if team_id not in overall_by_team:
+            continue
+        overall = overall_by_team[team_id]
+        wins, gp = team_record_from_games(week_games, team_id)
+        if gp <= 0:
+            out[team_id] = overall
+            continue
+        projected = projected_wins_by_team.get(team_id)
+        if projected is None:
+            out[team_id] = overall
+            continue
+        target = forecast_target_win_pct(float(projected))
+        out[team_id] = calibrate_resume_to_target(
+            team_id,
+            overall,
+            target,
             overall_by_team,
             week_games,
         )

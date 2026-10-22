@@ -89,6 +89,13 @@ Separate sort mode on the leaderboard (`mode=resume`). Starts from **Overall** a
 
 Implementation: [`cfb_rating/resume.py`](cfb_rating/resume.py). Recomputed in `compute_in_season_rankings.py` each weekly run.
 
+## Forecast Resume rating
+
+Leaderboard mode `mode=forecast_resume`. Same calibration as Resume, but the target win% is **projected season wins / 12** from the latest in-season sim records (`avg_wins`), not Bayesian record.
+
+- Added to the weekly rankings CSV by `augment_weekly_rankings_forecast_resume.py` after sims (see `update_in_season_weekly.py`).
+- `export_in_season_data.py` also recomputes from sim records when building `rankings.json`.
+
 ## Preseason fade (Blended column)
 
 `preseason_weight = (10 - min(games_played, 10)) / 10`
