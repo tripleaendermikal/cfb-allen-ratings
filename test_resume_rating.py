@@ -7,7 +7,9 @@ from cfb_rating.rating_algorithm import GameRecord
 from cfb_rating.resume import (
     bayesian_win_pct,
     calibrate_resume_rating,
+    calibrate_resume_to_target,
     expected_win_pct,
+    forecast_target_win_pct,
     team_record_from_games,
 )
 from cfb_rating.win_prob import team_win_probability
@@ -57,6 +59,18 @@ class TestResumeRating(unittest.TestCase):
         overall = {"1": 12.5}
         result = calibrate_resume_rating("1", 12.5, 0, 0, overall, [])
         self.assertEqual(result, 12.5)
+
+    def test_forecast_target_win_pct(self):
+        self.assertAlmostEqual(forecast_target_win_pct(9.0), 0.75)
+        self.assertAlmostEqual(forecast_target_win_pct(6.0), 0.5)
+
+    def test_calibration_moves_toward_forecast_target(self):
+        games = [_game("1", "2", 35, 7), _game("1", "3", 42, 0)]
+        overall = {"1": 5.0, "2": 0.0, "3": -5.0}
+        target = forecast_target_win_pct(10.5)  # 87.5%
+        resume = calibrate_resume_to_target("1", 5.0, target, overall, games)
+        expected = expected_win_pct("1", resume, overall, games)
+        self.assertLessEqual(abs(expected - target), 0.011)
 
     def test_calibration_moves_toward_bayesian(self):
         games = [_game("1", "2", 35, 7), _game("1", "3", 42, 0)]

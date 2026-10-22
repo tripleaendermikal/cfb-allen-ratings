@@ -18,6 +18,7 @@
     <select name="mode" onchange="this.form.submit()">
       <option value="overall" {% if ranking_mode == 'overall' %}selected{% endif %}>Overall</option>
       <option value="resume" {% if ranking_mode == 'resume' %}selected{% endif %}>Resume</option>
+      <option value="forecast_resume" {% if ranking_mode == 'forecast_resume' %}selected{% endif %}>Forecast Resume</option>
       <option value="algorithm" {% if ranking_mode == 'algorithm' %}selected{% endif %}>No Preseason</option>
     </select>
   </label>
@@ -49,6 +50,8 @@
       <th data-sort="num">Move</th>
       {% if ranking_mode == 'resume' %}
       <th data-sort="num">Resume</th>
+      {% elif ranking_mode == 'forecast_resume' %}
+      <th data-sort="num">Fcst Resume</th>
       {% else %}
       <th data-sort="num">Overall</th>
       <th data-sort="num">No Preseason</th>
@@ -80,6 +83,10 @@
       {% if ranking_mode == 'resume' %}
       <td class="num" data-value="{{ row.resume_margin if row.resume_margin is not none else '' }}">
         {% if row.resume_margin is not none %}{{ "%+.1f"|format(row.resume_margin) }}{% else %}—{% endif %}
+      </td>
+      {% elif ranking_mode == 'forecast_resume' %}
+      <td class="num" data-value="{{ row.forecast_resume_margin if row.forecast_resume_margin is not none else '' }}">
+        {% if row.forecast_resume_margin is not none %}{{ "%+.1f"|format(row.forecast_resume_margin) }}{% else %}—{% endif %}
       </td>
       {% else %}
       <td class="num" data-value="{{ row.overall_margin if row.overall_margin is not none else '' }}">

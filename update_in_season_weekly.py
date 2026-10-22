@@ -95,6 +95,19 @@ def main() -> int:
         ],
     )
 
+    if not args.skip_sims:
+        run_step(
+            "Augment rankings with forecast resume margins",
+            [
+                PYTHON,
+                str(REPO_ROOT / "augment_weekly_rankings_forecast_resume.py"),
+                "--games",
+                str(GAMES_CSV),
+                "--rankings",
+                str(RANKINGS_CSV),
+            ],
+        )
+
     run_step(
         "Export viewer JSON (move, fcst wins, playoff%, title%)",
         [PYTHON, str(REPO_ROOT / "export_in_season_data.py")],
