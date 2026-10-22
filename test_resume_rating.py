@@ -61,13 +61,14 @@ class TestResumeRating(unittest.TestCase):
         self.assertEqual(result, 12.5)
 
     def test_forecast_target_win_pct(self):
-        self.assertAlmostEqual(forecast_target_win_pct(9.0), 0.75)
-        self.assertAlmostEqual(forecast_target_win_pct(6.0), 0.5)
+        self.assertAlmostEqual(forecast_target_win_pct(9.0, 12.0), 0.75)
+        self.assertAlmostEqual(forecast_target_win_pct(6.0, 12.0), 0.5)
+        self.assertAlmostEqual(forecast_target_win_pct(9.0, 9.0), 1.0)
 
     def test_calibration_moves_toward_forecast_target(self):
         games = [_game("1", "2", 35, 7), _game("1", "3", 42, 0)]
         overall = {"1": 5.0, "2": 0.0, "3": -5.0}
-        target = forecast_target_win_pct(10.5)  # 87.5%
+        target = forecast_target_win_pct(10.5, 12.0)
         resume = calibrate_resume_to_target("1", 5.0, target, overall, games)
         expected = expected_win_pct("1", resume, overall, games)
         self.assertLessEqual(abs(expected - target), 0.011)
