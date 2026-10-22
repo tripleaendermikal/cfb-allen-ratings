@@ -47,7 +47,9 @@
       <th data-sort="num">#</th>
       <th data-sort="text">Team</th>
       <th data-sort="text">Conference</th>
+      {% if ranking_mode not in ('resume', 'forecast_resume') %}
       <th data-sort="num">Move</th>
+      {% endif %}
       {% if ranking_mode == 'resume' %}
       <th data-sort="num">Resume</th>
       {% elif ranking_mode == 'forecast_resume' %}
