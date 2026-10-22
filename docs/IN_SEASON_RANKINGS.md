@@ -91,7 +91,7 @@ Implementation: [`cfb_rating/resume.py`](cfb_rating/resume.py). Recomputed in `c
 
 ## Forecast Resume rating
 
-Leaderboard mode `mode=forecast_resume`. Same calibration as Resume, but the target win% is **projected season wins / 12** from the latest in-season sim records (`avg_wins`), not Bayesian record.
+Leaderboard mode `mode=forecast_resume`. Same calibration as Resume, but the target win% is **projected season wins / projected games played** from in-season sims (mean wins from sim records; mean games from sim results plus CCG when applicable), not Bayesian record.
 
 - Added to the weekly rankings CSV by `augment_weekly_rankings_forecast_resume.py` after sims (see `update_in_season_weekly.py`).
 - `export_in_season_data.py` also recomputes from sim records when building `rankings.json`.

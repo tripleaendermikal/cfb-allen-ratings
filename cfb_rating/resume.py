@@ -10,16 +10,17 @@ from cfb_rating.win_prob import team_win_probability
 RESUME_STEP = 0.01
 MAX_RESUME_ITERATIONS = 1000
 WIN_PCT_TOLERANCE = 0.01
-FORECAST_SEASON_GAMES = 12
 
 
 def bayesian_win_pct(wins: int, games: int) -> float:
     return (wins + 1) / (games + 2)
 
 
-def forecast_target_win_pct(projected_wins: float) -> float:
-    """Season projected wins as a win rate (12-game regular season)."""
-    return projected_wins / FORECAST_SEASON_GAMES
+def forecast_target_win_pct(projected_wins: float, projected_games: float) -> float:
+    """Projected season wins as win rate over projected games played."""
+    if projected_games <= 0:
+        return 0.0
+    return projected_wins / projected_games
 
 
 def team_record_from_games(
@@ -155,8 +156,9 @@ def compute_forecast_resume_margins(
     week_games: Sequence[GameRecord],
     overall_by_team: Mapping[str, float],
     projected_wins_by_team: Mapping[str, float],
+    projected_games_by_team: Mapping[str, float],
 ) -> dict[str, float]:
-    """Resume calibration with target win% = projected season wins / 12."""
+    """Resume calibration with target win% = projected wins / projected games."""
     out: dict[str, float] = {}
     for team_id in team_ids:
         if team_id not in overall_by_team:
@@ -167,10 +169,11 @@ def compute_forecast_resume_margins(
             out[team_id] = overall
             continue
         projected = projected_wins_by_team.get(team_id)
-        if projected is None:
+        projected_games = projected_games_by_team.get(team_id)
+        if projected is None or projected_games is None or projected_games <= 0:
             out[team_id] = overall
             continue
-        target = forecast_target_win_pct(float(projected))
+        target = forecast_target_win_pct(float(projected), float(projected_games))
         out[team_id] = calibrate_resume_to_target(
             team_id,
             overall,

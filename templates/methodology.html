@@ -30,7 +30,8 @@
   </p>
   <p>
     <strong>Forecast Resume</strong> uses the same calibration loop as Resume, but the target win rate is
-    <strong>forecasted wins ÷ 12</strong> (mean regular-season wins from the current in-season simulations).
+    <strong>forecasted wins ÷ forecasted games played</strong> (mean wins and mean games from the
+    current in-season simulations, including a conference championship game when the team reaches it).
     Opponents still use Overall. Teams with no completed FBS games use Overall. Projected wins are from the
     latest sim run, so historical weeks in the dropdown use that snapshot’s forecast with each week’s
     completed games through that week.
@@ -58,7 +59,7 @@
     <dt>Resume margin</dt>
     <dd>Overall adjusted to align sim-style expected win% on completed FBS games with Bayesian-smoothed win% (see In-season rankings above).</dd>
     <dt>Forecast Resume margin</dt>
-    <dd>Same as Resume, but the target win rate is forecasted season wins divided by 12 from in-season simulations.</dd>
+    <dd>Same as Resume, but the target win rate is forecasted season wins divided by forecasted games played from in-season simulations.</dd>
     <dt>No Preseason</dt>
     <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
     <dt>Record</dt>
