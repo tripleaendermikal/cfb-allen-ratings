@@ -352,6 +352,9 @@ class DataStore:
             if row["some_preseason_margin"] is None:
                 row["some_preseason_margin"] = _margin("opp_adj_margin")
             row["overall_margin"] = resolve_overall_margin(rank_row, lb_row)
+            row["resume_margin"] = rank_row.get("resume_margin")
+            if row["resume_margin"] is None:
+                row["resume_margin"] = lb_row.get("resume_margin")
             row["rank_delta"] = rank_row.get("rank_delta", lb_row.get("rank_delta", 0))
             row["fbs_games_played"] = rank_row.get(
                 "fbs_games_played", lb_row.get("fbs_games_played", 0)
@@ -376,6 +379,14 @@ class DataStore:
                 key=lambda r: (
                     r.get("algorithm_margin") is None,
                     -(r.get("algorithm_margin") or -999),
+                    r.get("team_name", "").lower(),
+                )
+            )
+        elif ranking_mode == "resume":
+            rows.sort(
+                key=lambda r: (
+                    r.get("resume_margin") is None,
+                    -(r.get("resume_margin") or -999),
                     r.get("team_name", "").lower(),
                 )
             )
@@ -899,7 +910,7 @@ def create_app() -> Flask:
         conf_filter = request.args.get("conference", "").strip()
         week_raw = request.args.get("week", "").strip()
         ranking_mode = request.args.get("mode", "overall").strip().lower()
-        if ranking_mode not in ("overall", "algorithm"):
+        if ranking_mode not in ("overall", "algorithm", "resume"):
             ranking_mode = "overall"
         if ranking_mode == "blended":
             ranking_mode = "overall"

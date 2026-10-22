@@ -252,6 +252,7 @@ def load_fbs_schedule_games(
 
             week_raw = (row.get("week") or "").strip()
             season_raw = (row.get("season_year") or row.get("season") or "").strip()
+            neutral_raw = (row.get("neutral_site") or "").strip().lower()
             home_yards = _parse_optional_yards(row.get("team_yards", ""))
             away_yards = _parse_optional_yards(row.get("opponent_yards", ""))
             if home_yards is None:
@@ -288,6 +289,7 @@ def load_fbs_schedule_games(
                     game_id=game_id,
                     week=int(week_raw) if week_raw else None,
                     season=int(season_raw) if season_raw else None,
+                    neutral_site=neutral_raw in ("true", "1", "yes"),
                 )
             )
             seen.add(game_id)

@@ -12,6 +12,7 @@ from typing import Dict, Mapping, Optional, Sequence, Union
 from cfb_rating.margin_rating import compute_margin_ratings
 from cfb_rating.opp_adjust import compute_opponent_adjusted_margins
 from cfb_rating.rating_algorithm import GameRecord, compute_team_ratings
+from cfb_rating.resume import compute_resume_margins
 from cfb_rating.season_data import DEFAULT_ESPN_TEAMS_CSV, load_fbs_team_ids
 
 
@@ -289,6 +290,7 @@ class InSeasonRankingRow:
     some_preseason_margin: float
     blended_margin: float
     overall_margin: float
+    resume_margin: float
     algorithm_rating: float
     preseason_weight: float
 
@@ -344,6 +346,7 @@ def compute_in_season_rankings_for_week(
         games_played,
         team_ids,
     )
+    resume_margins = compute_resume_margins(team_ids, week_games, overall_margins)
 
     info = team_info or {}
     ordered = sorted(
@@ -375,6 +378,7 @@ def compute_in_season_rankings_for_week(
                 some_preseason_margin=some_preseason_margins[team_id],
                 blended_margin=blended_margins[team_id],
                 overall_margin=overall_margins[team_id],
+                resume_margin=resume_margins[team_id],
                 algorithm_rating=ratings[team_id],
                 preseason_weight=preseason_weight,
             )
@@ -453,6 +457,7 @@ def write_in_season_rankings_csv(
         "some_preseason_margin",
         "blended_margin",
         "overall_margin",
+        "resume_margin",
         "algorithm_rating",
         "preseason_weight",
     ]
@@ -478,6 +483,7 @@ def write_in_season_rankings_csv(
                     "some_preseason_margin": f"{row.some_preseason_margin:.10f}",
                     "blended_margin": f"{row.blended_margin:.10f}",
                     "overall_margin": f"{row.overall_margin:.10f}",
+                    "resume_margin": f"{row.resume_margin:.10f}",
                     "algorithm_rating": f"{row.algorithm_rating:.10f}",
                     "preseason_weight": f"{row.preseason_weight:.10f}",
                 }

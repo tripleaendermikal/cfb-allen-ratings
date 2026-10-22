@@ -80,6 +80,15 @@ Opp Adj is the mean per-game **residual vs expectation**, using stabilized oppon
 
 Implementation: [`cfb_rating/opp_adjust.py`](cfb_rating/opp_adjust.py).
 
+## Resume rating
+
+Separate sort mode on the leaderboard (`mode=resume`). Starts from **Overall** and iteratively adjusts each team’s rating (±0.01 per step, max 1,000) until **expected win%** on completed FBS-vs-FBS games matches **Bayesian win%** `(W+1)/(G+2)` within 0.01.
+
+- **Expected win%:** same logistic as in-season sims (`cfb_rating/win_prob.py`), with the team under calibration using the current resume value and every opponent using **Overall** (fixed).
+- **0 FBS games:** Resume = Overall.
+
+Implementation: [`cfb_rating/resume.py`](cfb_rating/resume.py). Recomputed in `compute_in_season_rankings.py` each weekly run.
+
 ## Preseason fade (Blended column)
 
 `preseason_weight = (10 - min(games_played, 10)) / 10`

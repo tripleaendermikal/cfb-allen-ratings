@@ -144,6 +144,9 @@ def load_weekly_rankings(path: Path) -> dict:
                     "overall_margin": float(row["overall_margin"])
                     if (row.get("overall_margin") or "").strip()
                     else None,
+                    "resume_margin": float(row["resume_margin"])
+                    if (row.get("resume_margin") or "").strip()
+                    else None,
                     "preseason_margin": float(row["preseason_margin"])
                     if (row.get("preseason_margin") or "").strip()
                     else None,
