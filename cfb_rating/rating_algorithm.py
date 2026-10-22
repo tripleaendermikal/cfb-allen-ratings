@@ -24,6 +24,7 @@ class GameRecord:
     game_id: Optional[str] = None
     week: Optional[int] = None
     season: Optional[int] = None
+    neutral_site: bool = False
 
 
 def _collect_team_ids(games: Sequence[GameRecord]) -> list[str]:

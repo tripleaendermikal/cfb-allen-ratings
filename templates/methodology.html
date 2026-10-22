@@ -19,6 +19,15 @@
   <p>
   <strong>No Preseason</strong> shows the pure algorithm margin (capped at ±40) from completed FBS-vs-FBS results, with no preseason component.
   </p>
+  <p>
+    <strong>Resume</strong> starts from each team’s Overall margin and adjusts it so that
+    expected win percentage on completed FBS-vs-FBS games (using the same logistic win model as
+    in-season simulations) matches a Bayesian-smoothed record:
+    (wins + 1) / (games played + 2). Each team is calibrated independently: opponents keep their
+    Overall rating during the adjustment. The rating moves by 0.01 points per iteration until
+    expected and Bayesian win rates are within 0.01 or 1,000 iterations are reached. Teams with
+    no FBS games played use Overall as Resume.
+  </p>
 </div>
 
 <div class="card prose">
@@ -39,6 +48,8 @@
   <dl class="metric-list">
     <dt>Overall margin</dt>
     <dd>Primary rating blended from preseason and in-season results by games played. Centers each season’s simulated FPI draw; bracket odds use the draw, not this point estimate.</dd>
+    <dt>Resume margin</dt>
+    <dd>Overall adjusted to align sim-style expected win% on completed FBS games with Bayesian-smoothed win% (see In-season rankings above).</dd>
     <dt>No Preseason</dt>
     <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
     <dt>Record</dt>
