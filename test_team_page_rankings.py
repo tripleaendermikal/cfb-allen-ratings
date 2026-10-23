@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from app import DataStore
+from app import DataStore, create_app
 
 
 class TeamPageRankingsTest(unittest.TestCase):
@@ -33,6 +33,15 @@ class TeamPageRankingsTest(unittest.TestCase):
             self.store.lb_by_id[team_id].get("rank"),
             leaderboard_row.get("display_rank"),
         )
+
+    def test_team_detail_page_renders(self) -> None:
+        team_id = "87"
+        client = create_app().test_client()
+        response = client.get(f"/team/{team_id}")
+        self.assertEqual(response.status_code, 200)
+        body = response.data.decode()
+        self.assertIn("Resume", body)
+        self.assertNotIn("UndefinedError", body)
 
 
 if __name__ == "__main__":

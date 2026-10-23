@@ -1022,6 +1022,8 @@ def create_app() -> Flask:
             "some_preseason_margin": lb.get("some_preseason_margin")
             or lb.get("opp_adj_margin"),
             "overall_margin": lb.get("overall_margin"),
+            "resume_margin": lb.get("resume_margin"),
+            "forecast_resume_margin": lb.get("forecast_resume_margin"),
             "algorithm_margin": lb.get("algorithm_margin"),
             "rank_delta": lb.get("rank_delta", 0),
             "record": lb.get("record", "0-0"),
