@@ -1003,6 +1003,12 @@ def create_app() -> Flask:
         lb_base = lb_base or {}
         lb = store.team_row_for_week(team_id) or lb_base
         display_rank = lb.get("display_rank") or lb.get("rank")
+        display_title_pct = (
+            _leaderboard_title_pct(lb_base, "overall") if lb_base else None
+        )
+        display_playoff_pct = (
+            _leaderboard_playoff_pct(lb_base, "overall") if lb_base else None
+        )
         merged = {
             "team_id": team_id,
             "team_name": team.get("team_name") or lb.get("team_name", team_id),
@@ -1010,9 +1016,13 @@ def create_app() -> Flask:
             "avg_wins": team.get("avg_wins"),
             "forecasted_wins": lb.get("forecasted_wins"),
             "win_histogram": team.get("win_histogram", {}),
-            "title_odds_pct": lb_base.get("title_odds_pct", 0),
+            "title_odds_pct": display_title_pct
+            if display_title_pct is not None
+            else lb_base.get("title_odds_pct", 0),
             "conf_champ_odds_pct": lb_base.get("conf_champ_odds_pct", 0),
-            "eligibility_pct": lb_base.get("eligibility_pct", 0),
+            "eligibility_pct": display_playoff_pct
+            if display_playoff_pct is not None
+            else lb_base.get("eligibility_pct", 0),
             "conf_champ_appearances": lb_base.get("conf_champ_appearances", 0),
             "baseline_fpi": lb_base.get("baseline_fpi"),
             "sos": lb.get("sos") or team.get("sos") or lb_base.get("sos"),
