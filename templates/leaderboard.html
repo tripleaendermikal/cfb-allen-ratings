@@ -60,10 +60,8 @@
       {% endif %}
       <th data-sort="text">Record</th>
       <th data-sort="num">Fcst Wins</th>
-      <th data-sort="num">Playoff %</th>
-      <th data-sort="num">Title %</th>
-      <th data-sort="num">Resume Playoff %</th>
-      <th data-sort="num">Resume Title %</th>
+      <th data-sort="num">{% if ranking_mode in ('resume', 'forecast_resume') %}Resume Playoff %{% else %}Playoff %{% endif %}</th>
+      <th data-sort="num">{% if ranking_mode in ('resume', 'forecast_resume') %}Resume Title %{% else %}Title %{% endif %}</th>
     </tr>
   </thead>
   <tbody>
@@ -106,13 +104,11 @@
       <td class="num" data-value="{{ row.forecasted_wins if row.forecasted_wins is not none else '' }}">
         {% if row.forecasted_wins is not none %}{{ "%.2f"|format(row.forecasted_wins) }}{% else %}—{% endif %}
       </td>
-      <td class="num" data-value="{{ row.eligibility_pct }}">{{ row.eligibility_pct }}%</td>
-      <td class="num" data-value="{{ row.title_odds_pct }}">{{ row.title_odds_pct }}%</td>
-      <td class="num" data-value="{{ row.resume_playoff_eligibility_pct if row.resume_playoff_eligibility_pct is not none else '' }}">
-        {% if row.resume_playoff_eligibility_pct is not none %}{{ row.resume_playoff_eligibility_pct }}%{% else %}—{% endif %}
+      <td class="num" data-value="{{ row.display_playoff_pct if row.display_playoff_pct is not none else '' }}">
+        {% if row.display_playoff_pct is not none %}{{ row.display_playoff_pct }}%{% else %}—{% endif %}
       </td>
-      <td class="num" data-value="{{ row.resume_title_odds_pct if row.resume_title_odds_pct is not none else '' }}">
-        {% if row.resume_title_odds_pct is not none %}{{ row.resume_title_odds_pct }}%{% else %}—{% endif %}
+      <td class="num" data-value="{{ row.display_title_pct if row.display_title_pct is not none else '' }}">
+        {% if row.display_title_pct is not none %}{{ row.display_title_pct }}%{% else %}—{% endif %}
       </td>
     </tr>
     {% endfor %}

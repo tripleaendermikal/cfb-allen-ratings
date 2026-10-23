@@ -58,6 +58,41 @@ MARGIN_HIST_MAX = 50
 MARGIN_HIST_STEP = 5
 
 
+def _avg_playoff_metric(traditional: object, resume: object) -> float | None:
+    values: list[float] = []
+    if traditional is not None:
+        values.append(float(traditional))
+    if resume is not None:
+        values.append(float(resume))
+    if not values:
+        return None
+    return round(sum(values) / len(values), 2)
+
+
+def _leaderboard_playoff_pct(row: dict, ranking_mode: str) -> float | None:
+    if ranking_mode in ("resume", "forecast_resume"):
+        val = row.get("resume_playoff_eligibility_pct")
+        return float(val) if val is not None else None
+    if ranking_mode == "overall":
+        return _avg_playoff_metric(
+            row.get("eligibility_pct"), row.get("resume_playoff_eligibility_pct")
+        )
+    val = row.get("eligibility_pct")
+    return float(val) if val is not None else None
+
+
+def _leaderboard_title_pct(row: dict, ranking_mode: str) -> float | None:
+    if ranking_mode in ("resume", "forecast_resume"):
+        val = row.get("resume_title_odds_pct")
+        return float(val) if val is not None else None
+    if ranking_mode == "overall":
+        return _avg_playoff_metric(
+            row.get("title_odds_pct"), row.get("resume_title_odds_pct")
+        )
+    val = row.get("title_odds_pct")
+    return float(val) if val is not None else None
+
+
 def resolve_overall_margin(rank_row: dict, lb_row: dict) -> float | None:
     """Return overall margin, computing from components when export data is stale."""
     for source in (rank_row, lb_row):
@@ -379,6 +414,8 @@ class DataStore:
                 "resume_playoff_eligibility_pct"
             )
             row["resume_title_odds_pct"] = lb_row.get("resume_title_odds_pct")
+            row["display_playoff_pct"] = _leaderboard_playoff_pct(row, ranking_mode)
+            row["display_title_pct"] = _leaderboard_title_pct(row, ranking_mode)
             rows.append(row)
 
         if ranking_mode == "algorithm":
