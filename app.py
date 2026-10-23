@@ -143,26 +143,47 @@ def build_team_theme(team: dict, conference: str) -> dict:
 def enrich_conference_teams(conf: dict, store: "DataStore") -> list[dict]:
     ccg = store.conf_championship_summary.get("team_summary", {})
     bracket = store.brackets_summary.get("team_summary", {})
-    sim_count = store.sim_count
     enriched = []
     for t in conf["teams"]:
         tid = t["team_id"]
         lb = store.lb_by_id.get(tid, {})
         ccg_t = ccg.get(tid, {})
         br_t = bracket.get(tid, {})
-        apps = ccg_t.get("ccg_appearances", t.get("conf_champ_appearances", 0))
         wins = ccg_t.get("ccg_wins", 0)
         field_apps = br_t.get("field_appearances", lb.get("playoff_appearances", 0))
+        display_playoff = _leaderboard_playoff_pct(lb, "overall") if lb else None
+        display_title = _leaderboard_title_pct(lb, "overall") if lb else None
         row = dict(t)
         row["ccg_wins"] = wins
         row["playoff_appearances"] = field_apps
-        row["playoff_field_pct"] = round(field_apps / sim_count * 100, 1) if sim_count else 0
+        row["playoff_field_pct"] = (
+            display_playoff
+            if display_playoff is not None
+            else float(t.get("eligibility_pct") or 0)
+        )
+        row["title_odds_pct"] = (
+            display_title
+            if display_title is not None
+            else float(t.get("title_odds_pct") or 0)
+        )
         row["baseline_fpi"] = lb.get("baseline_fpi")
         row["fpi_ci_low"] = lb.get("fpi_ci_low")
         row["fpi_ci_high"] = lb.get("fpi_ci_high")
         row["sos"] = lb.get("sos") or t.get("sos")
         enriched.append(row)
     return enriched
+
+
+def prepare_conference(conf: dict, store: "DataStore") -> dict:
+    """Conference row with per-team odds aligned to overall leaderboard."""
+    prepared = dict(conf)
+    teams = enrich_conference_teams(prepared, store)
+    prepared["teams"] = teams
+    prepared["total_title_odds_pct"] = round(
+        sum(float(t.get("title_odds_pct") or 0) for t in teams),
+        2,
+    )
+    return prepared
 
 
 def build_conf_sim_snapshot(store: "DataStore", conf: dict, sim_index: int) -> dict:
@@ -1239,9 +1260,9 @@ def create_app() -> Flask:
             conf = next((c for c in store.conferences if c["conference"] == conf_name), None)
             if not conf:
                 abort(404)
-            conf = dict(conf)
+            conf = prepare_conference(conf, store)
             conf["teams"] = sorted(
-                enrich_conference_teams(conf, store),
+                conf["teams"],
                 key=lambda t: -float(t.get("conf_champ_odds_pct") or 0),
             )
             deep = store.conference_deep.get(conf_name, {})
@@ -1290,7 +1311,7 @@ def create_app() -> Flask:
             )
         return render_template(
             "conferences.html",
-            conferences=store.conferences,
+            conferences=[prepare_conference(c, store) for c in store.conferences],
             active="conferences",
         )
 
