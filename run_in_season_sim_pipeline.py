@@ -198,6 +198,24 @@ def main() -> int:
     )
 
     run_step(
+        "Append resume-playoff eligibility (sims 1001-2000)",
+        [
+            PYTHON,
+            str(REPO_ROOT / "append_resume_playoff_eligibility.py"),
+            "--elig",
+            str(IN_SEASON_ELIG),
+            "--records",
+            str(IN_SEASON_RECORDS),
+            "--games-sim",
+            str(IN_SEASON_SIMULATED),
+            "--games-fpi",
+            str(IN_SEASON_FPI),
+            "--conferences",
+            str(CONF_CSV),
+        ],
+    )
+
+    run_step(
         "National title odds",
         [
             PYTHON,

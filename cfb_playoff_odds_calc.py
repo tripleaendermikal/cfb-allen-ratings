@@ -30,9 +30,17 @@ from cfb_playoff_elig import (
     build_season_h2h_by_sim,
     elig_by_team_id_for_col,
     load_game_rows_for_h2h,
+    load_sim_fpi_by_team_id,
     load_sos_by_team_id,
     seed_playoff_field_col,
 )
+from cfb_playoff_resume_elig import (
+    is_resume_eligibility_col,
+    paired_game_sim_col,
+    seed_playoff_field_resume_col,
+)
+from cfb_rating.season_data import load_fbs_team_ids
+from cfb_rating.sim_resume import compute_sim_resume_margins, overall_margins_for_sim_col
 
 DEFAULT_ELIG_PATH = data_root() / "cfb_2026_FBS_playoff_elig_v2.csv"
 DEFAULT_GAMES_FPI_PATH = data_root() / "cfb_2026_fbs_games_with_fpi.csv"
@@ -109,6 +117,89 @@ def bracket_title_odds(
     return dict(zip(names, probs))
 
 
+def _aggregate_title_odds(
+    sim_cols: list[str],
+    elig_rows: list[dict],
+    records_rows: list[dict],
+    sim_fpi_by_col: dict[str, dict[str, float]],
+    sos_by_team_id: dict,
+    conf_champions_by_sim: dict,
+    h2h_wins_by_col,
+    h2h_games_by_col,
+    game_rows: list[dict] | None,
+    sim_fpi_by_team_id: dict,
+    team_ids: list[str],
+    fbs_ids: frozenset[str],
+) -> tuple[dict[str, dict], int]:
+    totals: dict[str, float] = {}
+    appearances: dict[str, int] = {}
+    seed_totals: dict[str, float] = {}
+    conferences: dict[str, str] = {}
+    used_sims = 0
+
+    for sim_col in sim_cols:
+        elig_by_team = elig_by_team_id_for_col(elig_rows, sim_col)
+        if is_resume_eligibility_col(sim_col):
+            if not game_rows:
+                continue
+            game_col = paired_game_sim_col(sim_col)
+            fpi_map = sim_fpi_by_col.get(game_col)
+            if not fpi_map:
+                continue
+            overall = overall_margins_for_sim_col(
+                sim_fpi_by_team_id, game_col, team_ids
+            )
+            margins = compute_sim_resume_margins(
+                game_rows,
+                game_col,
+                team_ids,
+                overall,
+                fbs_team_ids=fbs_ids,
+            )
+            seeded = seed_playoff_field_resume_col(
+                records_rows,
+                elig_by_team,
+                fpi_map,
+                margins,
+            )
+        else:
+            fpi_map = sim_fpi_by_col.get(sim_col)
+            if not fpi_map:
+                continue
+            seeded = seed_playoff_field_col(
+                records_rows,
+                sim_col,
+                elig_by_team,
+                fpi_map,
+                sos_by_team_id,
+                conf_champions_by_sim,
+                h2h_wins_by_col,
+                h2h_games_by_col,
+            )
+        if not seeded:
+            continue
+
+        used_sims += 1
+        result = bracket_title_odds(seeded)
+        for seed_idx, (name, conf, _) in enumerate(seeded, start=1):
+            conferences[name] = conf
+            appearances[name] = appearances.get(name, 0) + 1
+            seed_totals[name] = seed_totals.get(name, 0.0) + seed_idx
+            totals[name] = totals.get(name, 0.0) + result[name]
+
+    by_name: dict[str, dict] = {}
+    for name, total_prob in totals.items():
+        apps = appearances[name]
+        by_name[name] = {
+            "team_name": name,
+            "conference": conferences[name],
+            "title_odds_pct": round(total_prob / used_sims * 100, 2) if used_sims else 0.0,
+            "playoff_appearances": apps,
+            "avg_seed_when_in": round(seed_totals[name] / apps, 2) if apps else 0.0,
+        }
+    return by_name, used_sims
+
+
 def run_from_data(
     elig_path: Path,
     games_fpi_path: Path,
@@ -119,6 +210,7 @@ def run_from_data(
     conf_path: Path | None = None,
 ) -> int:
     sim_fpi_by_col = load_sim_fpi_by_team(games_fpi_path)
+    sim_fpi_by_team_id = load_sim_fpi_by_team_id(games_fpi_path)
     sos_by_team_id = load_sos_by_team_id(games_fpi_path)
 
     records_path = records_path or infer_records_path(elig_path)
@@ -128,6 +220,14 @@ def run_from_data(
     with records_path.open(encoding="utf-8-sig", newline="") as infile:
         records_rows = list(csv.DictReader(infile))
 
+    team_ids = sorted(
+        (row.get("team_id") or "").strip()
+        for row in records_rows
+        if (row.get("team_id") or "").strip()
+    )
+    fbs_ids = frozenset(load_fbs_team_ids().keys())
+
+    game_rows: list[dict] | None = None
     h2h_wins_by_col = None
     h2h_games_by_col = None
     conf_champions_by_sim = {col: {} for col in sim_columns(records_rows[0].keys()) if records_rows}
@@ -148,56 +248,60 @@ def run_from_data(
         elig_rows = list(elig_reader)
         elig_sim_cols = sim_columns(elig_reader.fieldnames or [])
 
-    sim_cols = [col for col in elig_sim_cols if col in sim_fpi_by_col]
-    if not sim_cols:
-        raise RuntimeError("No overlapping sim columns between eligibility and games FPI files")
+    trad_cols = [c for c in elig_sim_cols if not is_resume_eligibility_col(c)]
+    resume_cols = [c for c in elig_sim_cols if is_resume_eligibility_col(c)]
+    if not trad_cols:
+        raise RuntimeError("No traditional eligibility sim columns found")
 
-    totals: dict[str, float] = {}
-    appearances: dict[str, int] = {}
-    seed_totals: dict[str, float] = {}
-    conferences: dict[str, str] = {}
-    used_sims = 0
+    trad_stats, used_trad = _aggregate_title_odds(
+        trad_cols,
+        elig_rows,
+        records_rows,
+        sim_fpi_by_col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+        game_rows,
+        sim_fpi_by_team_id,
+        team_ids,
+        fbs_ids,
+    )
+    resume_stats, used_resume = _aggregate_title_odds(
+        resume_cols,
+        elig_rows,
+        records_rows,
+        sim_fpi_by_col,
+        sos_by_team_id,
+        conf_champions_by_sim,
+        h2h_wins_by_col,
+        h2h_games_by_col,
+        game_rows,
+        sim_fpi_by_team_id,
+        team_ids,
+        fbs_ids,
+    )
 
-    for sim_col in sim_cols:
-        elig_by_team = elig_by_team_id_for_col(elig_rows, sim_col)
-        seeded = seed_playoff_field_col(
-            records_rows,
-            sim_col,
-            elig_by_team,
-            sim_fpi_by_col[sim_col],
-            sos_by_team_id,
-            conf_champions_by_sim,
-            h2h_wins_by_col,
-            h2h_games_by_col,
-        )
-        if not seeded:
-            continue
-
-        used_sims += 1
-        result = bracket_title_odds(seeded)
-        for seed_idx, (name, conf, _) in enumerate(seeded, start=1):
-            conferences[name] = conf
-            appearances[name] = appearances.get(name, 0) + 1
-            seed_totals[name] = seed_totals.get(name, 0.0) + seed_idx
-            totals[name] = totals.get(name, 0.0) + result[name]
-
-    if used_sims == 0:
+    if used_trad == 0:
         raise RuntimeError("No simulation columns produced a 12-team playoff field")
 
+    all_names = set(trad_stats) | set(resume_stats)
     summary = []
-    for name, total_prob in totals.items():
-        apps = appearances[name]
+    for name in sorted(all_names, key=lambda n: (-trad_stats.get(n, {}).get("title_odds_pct", 0), n)):
+        trad = trad_stats.get(name, {})
+        resume = resume_stats.get(name, {})
         summary.append(
             {
                 "team_name": name,
-                "conference": conferences[name],
-                "title_odds_pct": round(total_prob / used_sims * 100, 2),
-                "playoff_appearances": apps,
-                "avg_seed_when_in": round(seed_totals[name] / apps, 2),
+                "conference": trad.get("conference") or resume.get("conference", ""),
+                "title_odds_pct": trad.get("title_odds_pct", 0.0),
+                "playoff_appearances": trad.get("playoff_appearances", 0),
+                "avg_seed_when_in": trad.get("avg_seed_when_in", 0.0),
+                "resume_title_odds_pct": resume.get("title_odds_pct", 0.0),
+                "resume_playoff_appearances": resume.get("playoff_appearances", 0),
+                "resume_avg_seed_when_in": resume.get("avg_seed_when_in", 0.0),
             }
         )
-
-    summary.sort(key=lambda row: (-float(row["title_odds_pct"]), row["team_name"]))
 
     fieldnames = [
         "team_name",
@@ -205,13 +309,19 @@ def run_from_data(
         "title_odds_pct",
         "playoff_appearances",
         "avg_seed_when_in",
+        "resume_title_odds_pct",
+        "resume_playoff_appearances",
+        "resume_avg_seed_when_in",
     ]
     with output_path.open("w", encoding="utf-8-sig", newline="") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(summary)
 
-    print(f"Processed {used_sims} playoff fields from {len(sim_cols)} sim columns")
+    print(
+        f"Processed {used_trad} traditional and {used_resume} resume playoff fields "
+        f"from {len(elig_sim_cols)} eligibility columns"
+    )
     print(f"Wrote {len(summary)} teams to {output_path}")
     return len(summary)
 
