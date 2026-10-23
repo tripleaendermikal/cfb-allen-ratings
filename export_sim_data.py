@@ -558,9 +558,17 @@ from cfb_conf_championship import ccg_participants_by_col, compute_conf_results_
 from cfb_playoff_elig import (
     build_season_h2h_by_sim,
     elig_by_team_id_for_col,
+    load_sim_fpi_by_team_id,
     load_sos_by_team_id,
     seed_playoff_indices_col,
 )
+from cfb_playoff_resume_elig import (
+    is_resume_eligibility_col,
+    paired_game_sim_col,
+    seed_playoff_indices_resume_col,
+)
+from cfb_rating.season_data import load_fbs_team_ids as load_fbs_teams_by_id
+from cfb_rating.sim_resume import compute_sim_resume_margins, overall_margins_for_sim_col
 from cfb_playoff_odds import championship_odds_exact
 from cfb_playoff_odds_calc import load_sim_fpi_by_team
 
@@ -711,6 +719,9 @@ def merge_conf_champ_odds(leaderboard: list[dict], conf_champ_rows: list[dict]) 
 
 def build_leaderboard(champ_rows: list[dict], elig_pct_rows: list[dict]) -> list[dict]:
     pct_by_name = {r["team_name"]: float(r["eligibility_pct"]) for r in elig_pct_rows}
+    resume_pct_by_name = {
+        r["team_name"]: float(r.get("resume_eligibility_pct") or 0) for r in elig_pct_rows
+    }
     out = []
     for row in champ_rows:
         name = row["team_name"]
@@ -723,6 +734,14 @@ def build_leaderboard(champ_rows: list[dict], elig_pct_rows: list[dict]) -> list
                 "playoff_appearances": int(row["playoff_appearances"]),
                 "avg_seed_when_in": float(row["avg_seed_when_in"]),
                 "eligibility_pct": pct_by_name.get(name, 0.0),
+                "resume_title_odds_pct": float(row.get("resume_title_odds_pct") or 0),
+                "resume_playoff_appearances": int(
+                    row.get("resume_playoff_appearances") or 0
+                ),
+                "resume_avg_seed_when_in": float(
+                    row.get("resume_avg_seed_when_in") or 0
+                ),
+                "resume_playoff_eligibility_pct": resume_pct_by_name.get(name, 0.0),
             }
         )
     for row in elig_pct_rows:
@@ -1580,10 +1599,18 @@ def build_brackets(
     seed_sums: dict[str, float] = {}
     seed_counts: dict[str, int] = {}
     r1_seeds = [[5, 12], [6, 11], [7, 10], [8, 9]]
+    game_sim_cols = [c for c in sim_cols if not is_resume_eligibility_col(c)]
+    sim_fpi_by_team_id = load_sim_fpi_by_team_id(SOURCES["games_fpi"])
+    fbs_ids = frozenset(load_fbs_teams_by_id().keys())
+    team_ids = sorted(
+        (row.get("team_id") or "").strip()
+        for row in records_rows
+        if (row.get("team_id") or "").strip()
+    )
     sim_records = (
         build_sim_records_by_team_col(
             records_rows,
-            sim_cols,
+            game_sim_cols,
             game_rows or [],
             conf_champions_by_sim,
             conf_finalists_by_sim,
@@ -1594,17 +1621,35 @@ def build_brackets(
 
     for sim_idx, col in enumerate(sim_cols):
         field_ids = fields[sim_idx] if sim_idx < len(fields) else []
-        fpi_by_name = sim_fpi_by_col.get(col, {})
+        record_col = paired_game_sim_col(col) if is_resume_eligibility_col(col) else col
+        fpi_by_name = sim_fpi_by_col.get(record_col, {})
         elig_by_team = elig_by_team_id_for_col(elig_rows, col)
-        seed_indices = seed_playoff_indices_col(
-            records_rows,
-            col,
-            elig_by_team,
-            sos_by_team_id,
-            conf_champions_by_sim,
-            h2h_wins_by_col,
-            h2h_games_by_col,
-        )
+        if is_resume_eligibility_col(col) and game_rows:
+            overall = overall_margins_for_sim_col(
+                sim_fpi_by_team_id, record_col, team_ids
+            )
+            margins = compute_sim_resume_margins(
+                game_rows,
+                record_col,
+                team_ids,
+                overall,
+                fbs_team_ids=fbs_ids,
+            )
+            seed_indices = seed_playoff_indices_resume_col(
+                records_rows,
+                elig_by_team,
+                margins,
+            )
+        else:
+            seed_indices = seed_playoff_indices_col(
+                records_rows,
+                record_col,
+                elig_by_team,
+                sos_by_team_id,
+                conf_champions_by_sim,
+                h2h_wins_by_col,
+                h2h_games_by_col,
+            )
         seeds: list[dict] = []
         if seed_indices and len(seed_indices) == 12:
             for seed_num, row_idx in enumerate(seed_indices, start=1):
@@ -1614,7 +1659,7 @@ def build_brackets(
                 if name not in fpi_by_name:
                     seeds = []
                     break
-                wins, losses = sim_records.get(tid, {}).get(col, (None, None))
+                wins, losses = sim_records.get(tid, {}).get(record_col, (None, None))
                 seed_entry = {
                     "team_id": tid,
                     "team_name": name,
@@ -1635,7 +1680,7 @@ def build_brackets(
             rated.sort(key=lambda x: (-x[1], x[0]))
             seeds = []
             for i, (tid, fpi) in enumerate(rated[:12]):
-                wins, losses = sim_records.get(tid, {}).get(col, (None, None))
+                wins, losses = sim_records.get(tid, {}).get(record_col, (None, None))
                 entry = {
                     "team_id": tid,
                     "team_name": id_to_name.get(tid, tid),
@@ -1694,18 +1739,33 @@ def write_sim_files(
     brackets_by_sim: list[dict],
     champions_by_sim: list[dict[str, str]],
     finalists_by_sim: list[dict[str, list[str]]],
+    sim_col_names: list[str] | None = None,
 ) -> int:
     """Write per-sim JSON files; return total bytes written."""
     sim_dir = data_dir / "sim"
     sim_dir.mkdir(parents=True, exist_ok=True)
     total = 0
     for sim_idx in range(sim_count):
+        col_name = (
+            sim_col_names[sim_idx]
+            if sim_col_names and sim_idx < len(sim_col_names)
+            else None
+        )
         payload = {
             "field": fields[sim_idx] if sim_idx < len(fields) else [],
             "bracket": brackets_by_sim[sim_idx] if sim_idx < len(brackets_by_sim) else {},
             "conf_champions": champions_by_sim[sim_idx] if sim_idx < len(champions_by_sim) else {},
             "conf_finalists": finalists_by_sim[sim_idx] if sim_idx < len(finalists_by_sim) else {},
+            "selection_mode": (
+                "resume"
+                if col_name and is_resume_eligibility_col(col_name)
+                else "traditional"
+            ),
         }
+        if col_name and is_resume_eligibility_col(col_name):
+            match = re.match(r"sim_(\d+)$", paired_game_sim_col(col_name))
+            if match:
+                payload["paired_game_sim_index"] = int(match.group(1))
         total += write_json(sim_dir / f"{sim_idx + 1:04d}.json", payload)
 
     for path in sim_dir.glob("*.json"):

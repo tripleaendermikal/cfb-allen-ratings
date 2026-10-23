@@ -375,6 +375,10 @@ class DataStore:
                 row["record"] = "0-0"
             if row.get("avg_wins") is not None:
                 row["forecasted_wins"] = round(float(row["avg_wins"]), 2)
+            row["resume_playoff_eligibility_pct"] = lb_row.get(
+                "resume_playoff_eligibility_pct"
+            )
+            row["resume_title_odds_pct"] = lb_row.get("resume_title_odds_pct")
             rows.append(row)
 
         if ranking_mode == "algorithm":
@@ -878,6 +882,7 @@ def create_app() -> Flask:
         sim_index = None
         sim_bracket = None
         sim_error = None
+        sim_selection_mode = None
         team_bracket = None
 
         if sim_raw:
@@ -887,6 +892,8 @@ def create_app() -> Flask:
                 if sim_index < 1 or sim_index > n:
                     sim_error = f"Sim index must be 1–{n}"
                 else:
+                    sim_payload = store.sim_data_at(sim_index - 1) or {}
+                    sim_selection_mode = sim_payload.get("selection_mode")
                     sim_bracket = store.bracket_at(sim_index - 1)
                     if not sim_bracket:
                         sim_error = "Bracket data not available for this sim"
@@ -907,6 +914,7 @@ def create_app() -> Flask:
             sim_index=sim_index,
             sim_bracket=sim_bracket,
             sim_error=sim_error,
+            sim_selection_mode=sim_selection_mode,
             team_filter=team_raw,
             team_bracket=team_bracket,
             team_options=team_options,

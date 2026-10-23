@@ -2,7 +2,7 @@
 {% block title %}Playoff Bracket — CFB Allen Ratings{% endblock %}
 {% block content %}
 <h1>Playoff Bracket</h1>
-<p class="subtitle">12-team bracket by simulation or team-centric seed history</p>
+<p class="subtitle">12-team bracket by simulation or team-centric seed history · sims 1–{{ meta.traditional_sim_count or meta.sim_count }} traditional{% if meta.resume_playoff_sim_count %} · {{ meta.traditional_sim_count + 1 }}–{{ meta.sim_count }} resume playoff{% endif %}</p>
 
 <div class="tab-bar" role="tablist">
   <button type="button" class="tab-link active" data-tab="sim-tab" role="tab" aria-selected="true">By simulation</button>
@@ -22,7 +22,7 @@
   {% if sim_error %}
   <p class="error">{{ sim_error }}</p>
   {% elif sim_bracket %}
-  <p><strong>Sim {{ sim_index }}</strong> · <a href="{{ url_for('fields', sim=sim_index) }}">View playoff field</a></p>
+  <p><strong>Sim {{ sim_index }}</strong>{% if sim_selection_mode == 'resume' %} (resume playoff selection){% elif sim_selection_mode == 'traditional' %} (traditional selection){% endif %} · <a href="{{ url_for('fields', sim=sim_index) }}">View playoff field</a></p>
 
   <div class="bracket-layout">
     <div class="bracket-section">

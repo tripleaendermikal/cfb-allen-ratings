@@ -62,6 +62,8 @@
       <th data-sort="num">Fcst Wins</th>
       <th data-sort="num">Playoff %</th>
       <th data-sort="num">Title %</th>
+      <th data-sort="num">Resume Playoff %</th>
+      <th data-sort="num">Resume Title %</th>
     </tr>
   </thead>
   <tbody>
@@ -106,6 +108,12 @@
       </td>
       <td class="num" data-value="{{ row.eligibility_pct }}">{{ row.eligibility_pct }}%</td>
       <td class="num" data-value="{{ row.title_odds_pct }}">{{ row.title_odds_pct }}%</td>
+      <td class="num" data-value="{{ row.resume_playoff_eligibility_pct if row.resume_playoff_eligibility_pct is not none else '' }}">
+        {% if row.resume_playoff_eligibility_pct is not none %}{{ row.resume_playoff_eligibility_pct }}%{% else %}—{% endif %}
+      </td>
+      <td class="num" data-value="{{ row.resume_title_odds_pct if row.resume_title_odds_pct is not none else '' }}">
+        {% if row.resume_title_odds_pct is not none %}{{ row.resume_title_odds_pct }}%{% else %}—{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

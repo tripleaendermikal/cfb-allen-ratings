@@ -51,19 +51,30 @@ SOURCES = {
 def compute_elig_pct_rows(
     elig_rows: list[dict[str, str]], sim_cols: list[str]
 ) -> list[dict[str, str]]:
+    from cfb_playoff_resume_elig import is_resume_eligibility_col
+
+    trad_cols = [c for c in sim_cols if not is_resume_eligibility_col(c)]
+    resume_cols = [c for c in sim_cols if is_resume_eligibility_col(c)]
     out: list[dict[str, str]] = []
-    n = len(sim_cols)
     for row in elig_rows:
-        if n == 0:
+        if not trad_cols:
             pct = 0.0
         else:
-            pct = sum(1 for col in sim_cols if (row.get(col) or "").strip() == "1")
-            pct = round(pct / n * 100, 1)
+            pct = sum(1 for col in trad_cols if (row.get(col) or "").strip() == "1")
+            pct = round(pct / len(trad_cols) * 100, 1)
+        if not resume_cols:
+            resume_pct = 0.0
+        else:
+            resume_pct = sum(
+                1 for col in resume_cols if (row.get(col) or "").strip() == "1"
+            )
+            resume_pct = round(resume_pct / len(resume_cols) * 100, 1)
         out.append(
             {
                 "team_name": row.get("team_name", ""),
                 "conference": row.get("conference", ""),
                 "eligibility_pct": str(pct),
+                "resume_eligibility_pct": str(resume_pct),
             }
         )
     return out
@@ -305,11 +316,17 @@ def main() -> int:
             print(f"Missing source file ({key}): {path}", file=sys.stderr)
             return 1
 
-    _, records_rows = esd.read_csv(SOURCES["records"])
-    sim_cols = esd.sim_columns(list(records_rows[0].keys()) if records_rows else [])
-    n_sims = len(sim_cols)
+    from cfb_playoff_resume_elig import is_resume_eligibility_col
 
-    teams = esd.build_teams(records_rows, sim_cols)
+    _, records_rows = esd.read_csv(SOURCES["records"])
+    _, elig_rows = esd.read_csv(SOURCES["elig"])
+    sim_cols = esd.sim_columns(list(elig_rows[0].keys()) if elig_rows else [])
+    game_sim_cols = [c for c in sim_cols if not is_resume_eligibility_col(c)]
+    n_sims = len(sim_cols)
+    trad_sim_count = len(game_sim_cols)
+    resume_sim_count = n_sims - trad_sim_count
+
+    teams = esd.build_teams(records_rows, game_sim_cols or sim_cols)
     try:
         branding = esd.fetch_espn_team_branding()
         esd.enrich_teams_branding(teams, branding)
@@ -322,7 +339,6 @@ def main() -> int:
     id_to_name = {t["team_id"]: t["team_name"] for t in teams}
 
     _, champ_rows = esd.read_csv(SOURCES["champ_odds"])
-    _, elig_rows = esd.read_csv(SOURCES["elig"])
     elig_pct_rows = compute_elig_pct_rows(elig_rows, sim_cols)
     _, conf_champ_rows = esd.read_csv(SOURCES["conf_champ_odds"])
 
@@ -358,13 +374,28 @@ def main() -> int:
 
     eligibility = esd.build_eligibility(elig_rows, sim_cols, name_to_id)
     field_analysis = esd.build_field_analysis(
-        eligibility["fields"], id_to_name, n_sims, conf_by_id
+        eligibility["fields"][:trad_sim_count],
+        id_to_name,
+        trad_sim_count,
+        conf_by_id,
     )
+    resume_field_analysis = None
+    if resume_sim_count > 0:
+        resume_field_analysis = esd.build_field_analysis(
+            eligibility["fields"][trad_sim_count:],
+            id_to_name,
+            resume_sim_count,
+            conf_by_id,
+        )
 
     _, game_rows = esd.read_csv(SOURCES["games_sim"])
-    margin_lists = esd.load_margin_lists(esd.resolve_margin_source(SOURCES), sim_cols)
+    margin_lists = esd.load_margin_lists(
+        esd.resolve_margin_source(SOURCES), game_sim_cols
+    )
     margin_map = esd.load_avg_margins(margin_lists)
-    full_schedule, schedule = esd.build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
+    full_schedule, schedule = esd.build_schedule(
+        game_rows, game_sim_cols, margin_map, conf_by_id
+    )
     if SOURCES["games_base"].is_file():
         _, base_rows = esd.read_csv(SOURCES["games_base"])
         enrich_schedule_scores(schedule, base_rows)
@@ -374,14 +405,14 @@ def main() -> int:
     games = esd.build_games(schedule, conf_by_id, margin_lists)
     enrich_games_scores(games, schedule)
     game_slugs = esd.build_game_slugs(games)
-    conf_championship = esd.build_conf_championship(sim_cols, id_to_name)
+    conf_championship = esd.build_conf_championship(game_sim_cols, id_to_name)
     conf_results = compute_conf_results_by_sim(
         SOURCES["games_sim"], SOURCES["games_fpi"], SOURCES["conferences"]
     )
     if SOURCES["games_base"].is_file():
         projected_wins_by_team, projected_games_by_team = projected_season_stats_from_sims(
             records_rows,
-            sim_cols,
+            game_sim_cols,
             game_rows,
             conf_finalists_by_sim=conf_results["finalists"],
         )
@@ -395,7 +426,9 @@ def main() -> int:
                 projected_wins_by_team,
                 projected_games_by_team,
             )
-    h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(game_rows, sim_cols)
+    h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
+        game_rows, game_sim_cols
+    )
     sos_by_team_id = load_sos_by_team_id(SOURCES["games_fpi"])
     brackets = esd.build_brackets(
         eligibility,
@@ -452,6 +485,8 @@ def main() -> int:
         "mode": "in_season",
         "current_week": current_week,
         "sim_count": n_sims,
+        "traditional_sim_count": trad_sim_count,
+        "resume_playoff_sim_count": resume_sim_count,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "sources": {k: str(v) for k, v in SOURCES.items()},
         "team_count": len(teams),
@@ -470,6 +505,11 @@ def main() -> int:
         ("teams.json", teams),
         ("eligibility.json", eligibility_slim),
         ("field_analysis.json", field_analysis),
+        *(
+            [("resume_field_analysis.json", resume_field_analysis)]
+            if resume_field_analysis is not None
+            else []
+        ),
         ("schedule.json", schedule),
         ("conferences.json", conferences),
         ("conference_deep.json", conference_deep),
@@ -483,13 +523,20 @@ def main() -> int:
     for name, payload in payloads:
         sizes[name] = esd.write_json(DATA_DIR / name, payload)
 
+    champs_by_sim = list(conf_championship["champions_by_sim"])
+    finalists_by_sim = list(conf_championship["finalists_by_sim"])
+    for i in range(trad_sim_count, n_sims):
+        champs_by_sim.append(champs_by_sim[i - trad_sim_count])
+        finalists_by_sim.append(finalists_by_sim[i - trad_sim_count])
+
     sim_bytes = esd.write_sim_files(
         DATA_DIR,
         n_sims,
         eligibility["fields"],
         brackets["by_sim"],
-        conf_championship["champions_by_sim"],
-        conf_championship["finalists_by_sim"],
+        champs_by_sim,
+        finalists_by_sim,
+        sim_col_names=sim_cols,
     )
     sizes["sim/*.json"] = sim_bytes
 
