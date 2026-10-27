@@ -17,6 +17,7 @@ from cfb_playoff_elig import (
 from cfb_rating.sim_resume import rank_team_ids_by_resume
 
 RESUME_PLAYOFF_SIM_OFFSET = 1000
+MAX_LOSSES_WITHOUT_CONF_CHAMP_AUTOBID = 3
 _SIM_COL = re.compile(r"^sim_(\d+)$")
 
 
@@ -51,6 +52,29 @@ def _team_id_to_index(source_rows: list[dict]) -> dict[str, int]:
     }
 
 
+def is_sim_conf_champion(
+    team_id: str,
+    game_sim_col: str,
+    conf_champions_by_sim: Mapping[str, Mapping[str, str]],
+) -> bool:
+    tid = (team_id or "").strip()
+    if not tid:
+        return False
+    return tid in conf_champions_by_sim.get(game_sim_col, {}).values()
+
+
+def resume_bid_blocked_four_loss_non_champ(
+    team_id: str,
+    losses: int,
+    game_sim_col: str,
+    conf_champions_by_sim: Mapping[str, Mapping[str, str]],
+) -> bool:
+    """Block at-large / G6 / ND bids for 4+ loss teams that did not win their conference."""
+    if losses <= MAX_LOSSES_WITHOUT_CONF_CHAMP_AUTOBID:
+        return False
+    return not is_sim_conf_champion(team_id, game_sim_col, conf_champions_by_sim)
+
+
 def resume_rank_indices(
     source_rows: list[dict],
     resume_margins: Mapping[str, float],
@@ -80,7 +104,19 @@ def compute_column_eligibility_resume(
     conf_champions_by_sim: dict,
     sos_by_team_id: dict,
     game_sim_col: str,
+    losses_by_team_id: Mapping[str, int] | None = None,
 ) -> None:
+    losses_map = losses_by_team_id or {}
+
+    def blocked(i: int) -> bool:
+        src = source_rows[i]
+        tid = (src.get("team_id") or "").strip()
+        return resume_bid_blocked_four_loss_non_champ(
+            tid,
+            int(losses_map.get(tid, 0)),
+            game_sim_col,
+            conf_champions_by_sim,
+        )
     for i in range(len(output_rows)):
         output_rows[i][col] = 0
 
@@ -93,7 +129,7 @@ def compute_column_eligibility_resume(
 
     group_indices = group_row_indices(source_rows)
     if group_indices:
-        g6_pick = max(
+        g6_candidates = sorted(
             group_indices,
             key=lambda i: (
                 float(resume_margins.get(source_rows[i]["team_id"], -999.0)),
@@ -102,9 +138,12 @@ def compute_column_eligibility_resume(
                 if (source_rows[i]["team_id"] or "").isdigit()
                 else 0,
             ),
+            reverse=True,
         )
-        eligible.add(g6_pick)
-        output_rows[g6_pick][col] = 1
+        g6_pick = next((i for i in g6_candidates if not blocked(i)), None)
+        if g6_pick is not None:
+            eligible.add(g6_pick)
+            output_rows[g6_pick][col] = 1
 
     ranked = resume_rank_indices(source_rows, resume_margins)
     nd_index = next(
@@ -117,7 +156,7 @@ def compute_column_eligibility_resume(
     )
     if nd_index is not None and nd_index in ranked:
         nd_rank = ranked.index(nd_index)
-        if nd_rank < 12 and nd_index not in eligible:
+        if nd_rank < 12 and nd_index not in eligible and not blocked(nd_index):
             eligible.add(nd_index)
             output_rows[nd_index][col] = 1
 
@@ -127,6 +166,8 @@ def compute_column_eligibility_resume(
         if source_rows[i]["conference"] in GROUP_CONFERENCES:
             continue
         if i in eligible:
+            continue
+        if blocked(i):
             continue
         eligible.add(i)
         output_rows[i][col] = 1

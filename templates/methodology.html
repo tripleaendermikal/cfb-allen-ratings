@@ -76,7 +76,7 @@
 <div class="card prose">
   <h2>Playoff selection &amp; bracket</h2>
   <p><strong>Traditional sims (1–{{ meta.traditional_sim_count or meta.sim_count }}):</strong> four power autobids, one Group of 5 autobid (playoff points), seven at-large spots by wins/SOS/H2H rules; seeds follow that ranking (G6 is seed 12).</p>
-  <p><strong>Resume playoff sims ({% if meta.resume_playoff_sim_count %}{{ meta.traditional_sim_count + 1 }}–{{ meta.sim_count }}{% else %}when enabled{% endif %}):</strong> same game outcomes as the paired traditional sim, but selection uses end-of-season resume margins — P4 champs, highest-resume G6, Notre Dame if top 12 by resume, then highest resume for remaining slots; seeds by resume (G6 still #12).</p>
+  <p><strong>Resume playoff sims ({% if meta.resume_playoff_sim_count %}{{ meta.traditional_sim_count + 1 }}–{{ meta.sim_count }}{% else %}when enabled{% endif %}):</strong> same game outcomes as the paired traditional sim, but selection uses end-of-season resume margins — P4 champs, highest-resume G6, Notre Dame if top 12 by resume, then highest resume for remaining slots; four-loss teams are ineligible unless they are a conference champion in that sim; seeds by resume (G6 still #12).</p>
   <p>Within each simulation, bracket matchup win probabilities use that simulation’s FPI draw, not the Overall column on the rankings table.</p>
   <p><a href="{{ url_for('bracket') }}">Explore brackets →</a> · <a href="{{ preseason_viewer_url }}" target="_blank" rel="noopener">Season preview (preseason)</a></p>
 </div>
