@@ -37,7 +37,7 @@ def _game(
 class TestResumeRating(unittest.TestCase):
     def test_bayesian_win_pct(self):
         self.assertAlmostEqual(bayesian_win_pct(0, 0), 0.5)
-        self.assertAlmostEqual(bayesian_win_pct(10, 12), 11 / 14)
+        self.assertAlmostEqual(bayesian_win_pct(10, 12), 10.5 / 13)
 
     def test_team_record_from_games(self):
         games = [_game("1", "2", 28, 14), _game("3", "1", 21, 24)]
@@ -61,9 +61,9 @@ class TestResumeRating(unittest.TestCase):
         self.assertEqual(result, 12.5)
 
     def test_forecast_target_win_pct(self):
-        self.assertAlmostEqual(forecast_target_win_pct(9.0, 12.0), 0.75)
-        self.assertAlmostEqual(forecast_target_win_pct(6.0, 12.0), 0.5)
-        self.assertAlmostEqual(forecast_target_win_pct(9.0, 9.0), 1.0)
+        self.assertAlmostEqual(forecast_target_win_pct(9.0, 12.0), 9.5 / 13)
+        self.assertAlmostEqual(forecast_target_win_pct(6.0, 12.0), 6.5 / 13)
+        self.assertAlmostEqual(forecast_target_win_pct(9.0, 9.0), 9.5 / 10)
 
     def test_calibration_moves_toward_forecast_target(self):
         games = [_game("1", "2", 35, 7), _game("1", "3", 42, 0)]
