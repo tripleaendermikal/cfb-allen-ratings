@@ -12,15 +12,22 @@ MAX_RESUME_ITERATIONS = 1000
 WIN_PCT_TOLERANCE = 0.01
 
 
+def smoothed_win_pct(wins: float, games: float) -> float:
+    """Prior-smoothed win rate: +0.5 wins and +1 game (resume and forecast resume)."""
+    if games < 0:
+        return 0.0
+    return (wins + 0.5) / (games + 1)
+
+
 def bayesian_win_pct(wins: int, games: int) -> float:
-    return (wins + 1) / (games + 2)
+    return smoothed_win_pct(float(wins), float(games))
 
 
 def forecast_target_win_pct(projected_wins: float, projected_games: float) -> float:
-    """Projected season wins as win rate over projected games played."""
+    """Smoothed projected season win rate (same prior as actual resume)."""
     if projected_games <= 0:
         return 0.0
-    return projected_wins / projected_games
+    return smoothed_win_pct(projected_wins, projected_games)
 
 
 def team_record_from_games(
@@ -158,7 +165,7 @@ def compute_forecast_resume_margins(
     projected_wins_by_team: Mapping[str, float],
     projected_games_by_team: Mapping[str, float],
 ) -> dict[str, float]:
-    """Resume calibration with target win% = projected wins / projected games."""
+    """Resume calibration with smoothed projected win% (same +0.5/+1 prior as resume)."""
     out: dict[str, float] = {}
     for team_id in team_ids:
         if team_id not in overall_by_team:
