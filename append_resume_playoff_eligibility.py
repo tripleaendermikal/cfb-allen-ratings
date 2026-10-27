@@ -25,6 +25,7 @@ from cfb_rating.sim_resume import (
     compute_sim_resume_margins,
     overall_margins_for_sim_col,
 )
+from export_sim_data import build_sim_records_by_team_col
 
 DEFAULT_RECORDS = data_root() / f"{IN_SEASON_PREFIX}_fbs_team_sim_records_v2.csv"
 DEFAULT_GAMES_SIM = data_root() / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi_simulated.csv"
@@ -61,6 +62,14 @@ def append_resume_columns(
         games_sim_path, games_fpi_path, conf_path
     )
     conf_champions = conf_results["champions"]
+    conf_finalists = conf_results["finalists"]
+    wl_by_team_col = build_sim_records_by_team_col(
+        source_rows,
+        game_sim_cols,
+        game_rows,
+        conf_champions,
+        conf_finalists,
+    )
 
     fbs_ids = frozenset(load_fbs_team_ids().keys())
     team_ids = sorted(
@@ -90,6 +99,13 @@ def append_resume_columns(
             overall,
             fbs_team_ids=fbs_ids,
         )
+        losses_by_team_id = {
+            tid: wl[1]
+            for tid, wl in (
+                (tid, by_col.get(game_col, (0, 0)))
+                for tid, by_col in wl_by_team_col.items()
+            )
+        }
         compute_column_eligibility_resume(
             elig_rows,
             source_rows,
@@ -98,6 +114,7 @@ def append_resume_columns(
             conf_champions,
             sos_by_team_id,
             game_col,
+            losses_by_team_id,
         )
         count = sum(int(row.get(resume_col) or 0) for row in elig_rows)
         if count == 12:

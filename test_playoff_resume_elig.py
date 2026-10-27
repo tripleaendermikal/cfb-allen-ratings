@@ -8,6 +8,7 @@ from cfb_playoff_resume_elig import (
     compute_column_eligibility_resume,
     paired_game_sim_col,
     paired_resume_elig_col,
+    resume_bid_blocked_four_loss_non_champ,
     seed_playoff_indices_resume_col,
 )
 
@@ -90,6 +91,60 @@ class TestResumePlayoffElig(unittest.TestCase):
         self.assertEqual(len(seeds), 12)
         g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
         self.assertEqual(seeds[-1], g6_idx)
+
+    def test_four_loss_at_large_blocked_conf_champ_ok(self):
+        teams = [
+            {"team_id": "1", "team_name": "SEC Champ", "conference": "SEC"},
+            {"team_id": "2", "team_name": "Four Loss", "conference": "SEC"},
+            {"team_id": "3", "team_name": "Filler", "conference": "Big Ten"},
+        ]
+        for n in range(4, 20):
+            teams.append(
+                {
+                    "team_id": str(n),
+                    "team_name": f"T{n}",
+                    "conference": "Big Ten",
+                }
+            )
+        cols = ["sim_0001", "sim_1001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        wins["1"] = 8
+        wins["2"] = 8
+        source = _rows(teams, wins, ["sim_0001"])
+        out = _rows(teams, wins, cols)
+        margins = {t["team_id"]: float(100 - int(t["team_id"])) for t in teams}
+        margins["2"] = 99.0
+        champs = {"sim_0001": {"SEC": "1"}}
+        losses = {t["team_id"]: 3 for t in teams}
+        losses["2"] = 4
+        compute_column_eligibility_resume(
+            out,
+            source,
+            "sim_1001",
+            margins,
+            champs,
+            {},
+            "sim_0001",
+            losses,
+        )
+        elig = {r["team_id"]: int(r["sim_1001"]) for r in out}
+        self.assertEqual(elig["2"], 0)
+        self.assertTrue(
+            resume_bid_blocked_four_loss_non_champ("2", 4, "sim_0001", champs)
+        )
+        losses["1"] = 4
+        compute_column_eligibility_resume(
+            out,
+            source,
+            "sim_1001",
+            margins,
+            champs,
+            {},
+            "sim_0001",
+            losses,
+        )
+        elig = {r["team_id"]: int(r["sim_1001"]) for r in out}
+        self.assertEqual(elig["1"], 1)
 
 
 if __name__ == "__main__":
