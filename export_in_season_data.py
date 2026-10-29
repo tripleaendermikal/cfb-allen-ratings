@@ -373,8 +373,15 @@ def main() -> int:
     )
 
     eligibility = esd.build_eligibility(elig_rows, sim_cols, name_to_id)
+    all_fields = eligibility["fields"]
     field_analysis = esd.build_field_analysis(
-        eligibility["fields"][:trad_sim_count],
+        all_fields,
+        id_to_name,
+        n_sims,
+        conf_by_id,
+    )
+    traditional_field_analysis = esd.build_field_analysis(
+        all_fields[:trad_sim_count],
         id_to_name,
         trad_sim_count,
         conf_by_id,
@@ -382,7 +389,7 @@ def main() -> int:
     resume_field_analysis = None
     if resume_sim_count > 0:
         resume_field_analysis = esd.build_field_analysis(
-            eligibility["fields"][trad_sim_count:],
+            all_fields[trad_sim_count:],
             id_to_name,
             resume_sim_count,
             conf_by_id,
@@ -505,6 +512,7 @@ def main() -> int:
         ("teams.json", teams),
         ("eligibility.json", eligibility_slim),
         ("field_analysis.json", field_analysis),
+        ("traditional_field_analysis.json", traditional_field_analysis),
         *(
             [("resume_field_analysis.json", resume_field_analysis)]
             if resume_field_analysis is not None
