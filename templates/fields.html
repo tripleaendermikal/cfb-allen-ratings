@@ -95,20 +95,6 @@
       </div>
     </div>
     {% endif %}
-    {% if analysis.p4_avg_teams_in_field is not none %}
-    <div class="card">
-      <div class="stat-label">Avg P4 Teams per Field</div>
-      <div class="stat-value">{{ "%.1f"|format(analysis.p4_avg_teams_in_field) }}</div>
-      <div class="muted" style="font-size:0.8rem;">SEC, Big Ten, ACC, Big 12 combined</div>
-    </div>
-    {% endif %}
-    {% if analysis.pct_sims_with_g6 is not none %}
-    <div class="card">
-      <div class="stat-label">Sims with G6 Team</div>
-      <div class="stat-value">{{ analysis.pct_sims_with_g6 }}%</div>
-      <div class="muted" style="font-size:0.8rem;">Group of 6 in the playoff field</div>
-    </div>
-    {% endif %}
   </div>
 
   <div class="card">
