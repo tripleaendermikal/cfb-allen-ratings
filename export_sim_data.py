@@ -946,6 +946,7 @@ def build_field_analysis(
     unique_fields = len(set(tuple(f) for f in fields))
     g6_sims_with_member = g6_hist.get("1", 0) + g6_hist.get("2+", 0)
     return {
+        "sim_count": n_sims,
         "unique_field_count": unique_fields,
         "top_teams": top_teams,
         "top_pairs": top_pairs,
@@ -1722,6 +1723,7 @@ def build_brackets(
             "seed_histogram": dict(sorted(hist.items(), key=lambda x: int(x[0]))),
             "title_odds_pct": title_odds.get(tid, 0),
             "field_appearances": n,
+            "field_appearance_pct": round(n / len(sim_cols) * 100, 2) if sim_cols else 0,
         }
 
     return {

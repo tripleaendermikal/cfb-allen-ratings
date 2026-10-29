@@ -103,12 +103,17 @@
     {% if team_bracket.field_appearances %}
     <div class="card">
       <div class="stat-label">Field Appearances</div>
-      <div class="stat-value">{{ team_bracket.field_appearances }}</div>
+      <div class="stat-value">{{ team_bracket.field_appearances }} <span class="muted" style="font-size:0.45em;">/ {{ meta.sim_count }}</span></div>
+      {% if team_bracket.field_appearance_pct is not none %}
+      <div class="muted" style="font-size:0.85rem;">{{ team_bracket.field_appearance_pct }}% of all sims</div>
+      {% elif meta.sim_count %}
+      <div class="muted" style="font-size:0.85rem;">{{ "%.1f"|format(team_bracket.field_appearances / meta.sim_count * 100) }}% of all sims</div>
+      {% endif %}
     </div>
     {% endif %}
   </div>
   {% if team_bracket.seed_histogram %}
-  <h3>Seed distribution</h3>
+  <h3>Seed distribution ({{ meta.sim_count }} sims)</h3>
   <table class="data-table compact-table">
     <thead><tr><th>Seed</th><th>Count</th></tr></thead>
     <tbody>
