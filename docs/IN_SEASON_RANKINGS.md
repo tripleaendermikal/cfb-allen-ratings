@@ -91,7 +91,7 @@ Implementation: [`cfb_rating/resume.py`](cfb_rating/resume.py). Recomputed in `c
 
 ## Forecast Resume rating
 
-Leaderboard mode `mode=forecast_resume`. Same calibration as Resume, but the target win% is **smoothed projected win%** `(projected_wins+0.5)/(projected_games+1)` from in-season sims (mean wins from sim records; mean games from sim results plus CCG when applicable). If **expected win% on completed games at Overall** is already at or above that sim target, Forecast Resume stays at **Overall** (no downward adjustment for teams whose resume trail Overall but sim season pace is already implied by quality on the sample).
+Leaderboard mode `mode=forecast_resume`. Same calibration as Resume, but the target win% is **smoothed projected win%** `(projected_wins+0.5)/(projected_games+1)` from in-season sims (mean wins from sim records; mean games from sim results plus CCG when applicable).
 
 - Added to the weekly rankings CSV by `augment_weekly_rankings_forecast_resume.py` after sims (see `update_in_season_weekly.py`).
 - `export_in_season_data.py` also recomputes from sim records when building `rankings.json`.

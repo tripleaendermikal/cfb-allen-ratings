@@ -181,17 +181,6 @@ def compute_forecast_resume_margins(
             out[team_id] = overall
             continue
         target = forecast_target_win_pct(float(projected), float(projected_games))
-        team_games = [
-            g for g in week_games if team_id in (g.home_team_id, g.away_team_id)
-        ]
-        exp_at_overall = expected_win_pct(
-            team_id, overall, overall_by_team, team_games
-        )
-        if exp_at_overall >= target - WIN_PCT_TOLERANCE:
-            # Sims imply a season pace already met at Overall on games played
-            # (e.g. elite Overall with modest 5–2); do not deflate below Overall.
-            out[team_id] = overall
-            continue
         out[team_id] = calibrate_resume_to_target(
             team_id,
             overall,
