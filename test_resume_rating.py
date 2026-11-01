@@ -8,6 +8,7 @@ from cfb_rating.resume import (
     bayesian_win_pct,
     calibrate_resume_rating,
     calibrate_resume_to_target,
+    compute_forecast_resume_margins,
     expected_win_pct,
     forecast_target_win_pct,
     team_record_from_games,
@@ -81,6 +82,37 @@ class TestResumeRating(unittest.TestCase):
         resume = calibrate_resume_rating("1", 5.0, wins, gp, overall, games)
         expected = expected_win_pct("1", resume, overall, games)
         self.assertLessEqual(abs(expected - target), 0.011)
+
+    def test_forecast_resume_keeps_overall_when_sample_exceeds_sim_pace(self):
+        games = [_game("1", "2", 35, 7), _game("1", "3", 42, 10)]
+        overall = {"1": 25.0, "2": 0.0, "3": 0.0}
+        target = forecast_target_win_pct(9.0, 12.0)
+        exp_o = expected_win_pct("1", 25.0, overall, games)
+        self.assertGreater(exp_o, target)
+        margins = compute_forecast_resume_margins(
+            ["1"],
+            games,
+            overall,
+            {"1": 9.0},
+            {"1": 12.0},
+        )
+        self.assertAlmostEqual(margins["1"], 25.0)
+
+    def test_forecast_resume_still_raises_when_below_sim_pace(self):
+        games = [
+            _game("1", "2", 21, 28),
+            _game("1", "3", 17, 24),
+            _game("1", "4", 24, 27),
+        ]
+        overall = {"1": 5.0, "2": 10.0, "3": 8.0, "4": 12.0}
+        margins = compute_forecast_resume_margins(
+            ["1"],
+            games,
+            overall,
+            {"1": 8.0},
+            {"1": 12.0},
+        )
+        self.assertGreater(margins["1"], overall["1"])
 
 
 if __name__ == "__main__":
