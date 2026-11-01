@@ -24,7 +24,6 @@ from cfb_conf_championship import compute_conf_results_by_sim  # noqa: E402
 from cfb_in_season_sim import is_completed, parse_score  # noqa: E402
 from cfb_playoff_elig import build_season_h2h_by_sim, load_sos_by_team_id  # noqa: E402
 from cfb_rating.forecast_resume_enrich import (  # noqa: E402
-    enrich_rankings_json_forecast_resume,
     projected_season_stats_from_sims,
 )
 from cfb_rating.in_season import compute_overall_margin  # noqa: E402
@@ -423,16 +422,7 @@ def main() -> int:
             game_rows,
             conf_finalists_by_sim=conf_results["finalists"],
         )
-        if projected_wins_by_team:
-            games_for_resume = load_games_for_in_season_rankings(
-                SOURCES["games_base"], fbs_only=True
-            )
-            enrich_rankings_json_forecast_resume(
-                rankings,
-                games_for_resume,
-                projected_wins_by_team,
-                projected_games_by_team,
-            )
+        _ = projected_wins_by_team, projected_games_by_team
     h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
         game_rows, game_sim_cols
     )

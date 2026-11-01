@@ -1,4 +1,4 @@
-"""Augment weekly rankings with forecast resume (post-sim projected wins)."""
+"""Augment weekly rankings with forecast resume from in-season sim outcomes."""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from cfb_conf_championship import ccg_participants_by_col
-from cfb_rating.in_season import DEFAULT_MAX_WEEK, filter_games_through_week
-from cfb_rating.rating_algorithm import GameRecord
-from cfb_rating.resume import compute_forecast_resume_margins
-from cfb_rating.season_data import load_fbs_team_ids, load_games_for_in_season_rankings
+from cfb_rating.resume import compute_resume_margins
+from cfb_rating.season_data import load_fbs_team_ids
+from cfb_rating.sim_resume import build_sim_season_games
 
 
 def projected_wins_from_sim_records(
@@ -19,7 +18,7 @@ def projected_wins_from_sim_records(
 ) -> dict[str, float]:
     out: dict[str, float] = {}
     for row in records_rows:
-        team_id = (row.get("team_id") or "").strip()
+        team_id = (row.get("team_id") or row.get("\ufeffteam_id") or "").strip()
         if not team_id or not sim_cols:
             continue
         wins = [int(row[col]) for col in sim_cols]
@@ -80,54 +79,44 @@ def projected_season_stats_from_sims(
     return wins, games
 
 
-def enrich_rankings_json_forecast_resume(
-    rankings: dict,
-    games: Sequence[GameRecord],
-    projected_wins_by_team: Mapping[str, float],
-    projected_games_by_team: Mapping[str, float],
-    *,
-    team_ids: Sequence[str] | None = None,
-    max_week: int = DEFAULT_MAX_WEEK,
-) -> None:
-    """Add ``forecast_resume_margin`` to each entry in ``rankings['by_week']``."""
-    ids = list(team_ids) if team_ids is not None else sorted(projected_wins_by_team.keys())
-    by_week = rankings.get("by_week") or {}
-    for week_key, entries in by_week.items():
-        week = int(week_key)
-        week_games = filter_games_through_week(games, week, max_week=max_week)
-        overall_by_team = {
-            entry["team_id"]: float(entry["overall_margin"])
-            for entry in entries
-            if entry.get("overall_margin") is not None
-        }
-        if not overall_by_team:
-            continue
-        margins = compute_forecast_resume_margins(
-            ids,
-            week_games,
-            overall_by_team,
-            projected_wins_by_team,
-            projected_games_by_team,
+def mean_sim_forecast_resume_for_overall(
+    season_by_col: Mapping[str, Sequence],
+    sim_cols: Sequence[str],
+    team_ids: Sequence[str],
+    overall_by_team: Mapping[str, float],
+) -> dict[str, float]:
+    """Average end-of-season resume margin over sim columns (opponents at Overall)."""
+    if not sim_cols:
+        return {}
+    totals: dict[str, float] = defaultdict(float)
+    n = float(len(sim_cols))
+    for col in sim_cols:
+        per_sim = compute_resume_margins(
+            team_ids, season_by_col[col], overall_by_team
         )
-        for entry in entries:
-            tid = entry["team_id"]
-            if tid in margins:
-                entry["forecast_resume_margin"] = margins[tid]
+        for tid, margin in per_sim.items():
+            totals[tid] += margin
+    return {tid: totals[tid] / n for tid in totals}
 
 
 def augment_weekly_rankings_csv_forecast_resume(
     rankings_csv: Path,
-    games_csv: Path,
-    projected_wins_by_team: Mapping[str, float],
-    projected_games_by_team: Mapping[str, float],
+    game_rows: Sequence[Mapping[str, str]],
+    sim_cols: Sequence[str],
     *,
     team_ids: Sequence[str] | None = None,
-    max_week: int = DEFAULT_MAX_WEEK,
+    forecast_week: int | None = None,
 ) -> int:
-    """Write ``forecast_resume_margin`` column on the weekly rankings CSV."""
+    """Write ``forecast_resume_margin`` on the weekly rankings CSV.
+
+    Mean sim end-of-season resume is computed only for ``forecast_week`` (default:
+    latest week in the file). Other weeks copy ``resume_margin`` so export stays fast.
+    """
     rankings_csv = Path(rankings_csv)
-    games = load_games_for_in_season_rankings(games_csv, fbs_only=True)
-    ids = list(team_ids) if team_ids is not None else sorted(load_fbs_team_ids().keys())
+    ids = list(team_ids) if team_ids is not None else sorted(load_fbs_team_ids())
+    season_by_col = {
+        col: build_sim_season_games(game_rows, col) for col in sim_cols
+    }
 
     with rankings_csv.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -141,23 +130,27 @@ def augment_weekly_rankings_csv_forecast_resume(
     for row in rows:
         by_week[int(row["week"])].append(row)
 
-    for week, week_rows in by_week.items():
-        week_games = filter_games_through_week(games, week, max_week=max_week)
+    target_week = forecast_week if forecast_week is not None else max(by_week.keys())
+    margins: dict[str, float] | None = None
+    if target_week in by_week and sim_cols:
+        week_rows = by_week[target_week]
         overall_by_team = {
             row["team_id"]: float(row["overall_margin"])
             for row in week_rows
             if (row.get("overall_margin") or "").strip()
         }
-        margins = compute_forecast_resume_margins(
-            ids,
-            week_games,
-            overall_by_team,
-            projected_wins_by_team,
-            projected_games_by_team,
+        week_ids = [tid for tid in ids if tid in overall_by_team]
+        margins = mean_sim_forecast_resume_for_overall(
+            season_by_col, sim_cols, week_ids, overall_by_team
         )
+
+    for week, week_rows in by_week.items():
         for row in week_rows:
             tid = row["team_id"]
-            row["forecast_resume_margin"] = f"{margins.get(tid, overall_by_team.get(tid, 0.0)):.10f}"
+            if week == target_week and margins and tid in margins:
+                row["forecast_resume_margin"] = f"{margins[tid]:.10f}"
+            elif (row.get("resume_margin") or "").strip():
+                row["forecast_resume_margin"] = row["resume_margin"]
 
     with rankings_csv.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")

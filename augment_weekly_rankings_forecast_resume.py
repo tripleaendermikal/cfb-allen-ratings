@@ -4,16 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
-from cfb_conf_championship import compute_conf_results_by_sim
+from cfb_paths import data_root
+from cfb_rating.forecast_resume_enrich import augment_weekly_rankings_csv_forecast_resume
 
 import export_sim_data as esd
-from cfb_paths import data_root
-from cfb_rating.forecast_resume_enrich import (
-    augment_weekly_rankings_csv_forecast_resume,
-    projected_season_stats_from_sims,
-)
 
 IN_SEASON_PREFIX = "cfb_2026_in_season"
 DEFAULT_GAMES = data_root() / "cfb_2026_fbs_games_with_fpi.csv"
@@ -24,8 +21,22 @@ DEFAULT_GAMES_FPI = data_root() / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi.csv"
 DEFAULT_CONFERENCES = data_root() / "espn_cfb_teams_conferences.csv"
 
 
+DEFAULT_META = data_root().parent / "data" / "meta.json"
+
+
+def resolve_forecast_week(explicit: int | None) -> int | None:
+    if explicit is not None:
+        return explicit
+    if DEFAULT_META.is_file():
+        current = json.loads(DEFAULT_META.read_text()).get("current_week")
+        if current:
+            return int(current)
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--forecast-week", type=int, default=None)
     parser.add_argument("--games", type=Path, default=DEFAULT_GAMES)
     parser.add_argument("--rankings", type=Path, default=DEFAULT_RANKINGS)
     parser.add_argument("--records", type=Path, default=DEFAULT_RECORDS)
@@ -47,23 +58,12 @@ def main() -> int:
     _, records_rows = esd.read_csv(args.records)
     _, game_rows = esd.read_csv(args.games_sim)
     sim_cols = esd.sim_columns(list(records_rows[0].keys()) if records_rows else [])
-    conf_finalists = None
-    if args.games_fpi.is_file() and args.conferences.is_file():
-        conf_finalists = compute_conf_results_by_sim(
-            args.games_sim, args.games_fpi, args.conferences
-        )["finalists"]
-    projected_wins, projected_games = projected_season_stats_from_sims(
-        records_rows,
-        sim_cols,
-        game_rows,
-        conf_finalists_by_sim=conf_finalists,
-    )
 
     count = augment_weekly_rankings_csv_forecast_resume(
         args.rankings,
-        args.games,
-        projected_wins,
-        projected_games,
+        game_rows,
+        sim_cols,
+        forecast_week=resolve_forecast_week(args.forecast_week),
     )
     print(f"Updated forecast_resume_margin on {count} rows in {args.rankings}")
     return 0

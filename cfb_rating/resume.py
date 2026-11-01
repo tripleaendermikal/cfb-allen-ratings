@@ -57,7 +57,7 @@ def _rating_for_side(
 ) -> float:
     if team_id == subject_id:
         return subject_resume
-    return overall_by_team[team_id]
+    return overall_by_team.get(team_id, 0.0)
 
 
 def expected_win_pct(
@@ -152,39 +152,6 @@ def compute_resume_margins(
             overall,
             wins,
             gp,
-            overall_by_team,
-            week_games,
-        )
-    return out
-
-
-def compute_forecast_resume_margins(
-    team_ids: Sequence[str],
-    week_games: Sequence[GameRecord],
-    overall_by_team: Mapping[str, float],
-    projected_wins_by_team: Mapping[str, float],
-    projected_games_by_team: Mapping[str, float],
-) -> dict[str, float]:
-    """Resume calibration with smoothed projected win% (same +0.5/+1 prior as resume)."""
-    out: dict[str, float] = {}
-    for team_id in team_ids:
-        if team_id not in overall_by_team:
-            continue
-        overall = overall_by_team[team_id]
-        wins, gp = team_record_from_games(week_games, team_id)
-        if gp <= 0:
-            out[team_id] = overall
-            continue
-        projected = projected_wins_by_team.get(team_id)
-        projected_games = projected_games_by_team.get(team_id)
-        if projected is None or projected_games is None or projected_games <= 0:
-            out[team_id] = overall
-            continue
-        target = forecast_target_win_pct(float(projected), float(projected_games))
-        out[team_id] = calibrate_resume_to_target(
-            team_id,
-            overall,
-            target,
             overall_by_team,
             week_games,
         )
