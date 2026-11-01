@@ -40,6 +40,8 @@ from cfb_game_corrections import (
 
 )
 
+from cfb_conference_corrections import patch_schedule_row_conferences
+
 
 
 SCOREBOARD_URL = (
@@ -367,7 +369,11 @@ def update_schedule_csv(
 
     corrected_yard_games = apply_yard_corrections(rows, corrections)
 
-
+    conf_patched = patch_schedule_row_conferences(
+        rows, data_root() / "espn_cfb_teams_conferences.csv"
+    )
+    if conf_patched:
+        print(f"Patched conference on {conf_patched} schedule row(s) from overrides")
 
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
 

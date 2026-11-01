@@ -33,6 +33,7 @@ from cfb_rating.in_season import (
     load_preseason_margins,
 )
 from cfb_rating.season_data import load_fbs_team_ids, load_games_for_in_season_rankings
+from cfb_conference_corrections import apply_conference_lookup_overrides
 
 DEFAULT_NUM_SIMS = 1000
 DEFAULT_SIGMA = 7.3
@@ -65,6 +66,7 @@ def load_conference_lookup(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                 by_id[tid] = conf
             if name:
                 by_name[name] = conf
+    apply_conference_lookup_overrides(by_id)
     return by_id, by_name
 
 

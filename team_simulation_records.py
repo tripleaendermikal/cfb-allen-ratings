@@ -9,6 +9,7 @@ Output: one row per distinct team_id, one column per simulation, integer wins on
 from __future__ import annotations
 
 from cfb_paths import data_root
+from cfb_conference_corrections import apply_conference_lookup_overrides
 
 import argparse
 import csv
@@ -41,6 +42,7 @@ def load_conference_lookup(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                 by_id[tid] = conf
             if name:
                 by_name[name] = conf
+    apply_conference_lookup_overrides(by_id)
     return by_id, by_name
 
 

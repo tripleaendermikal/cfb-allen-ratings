@@ -12,6 +12,7 @@ from cfb_game_corrections import (
     get_yard_overrides,
     load_corrections,
 )
+from cfb_conference_corrections import apply_team_conference_override
 from cfb_paths import data_root
 from cfb_rating.rating_algorithm import GameRecord
 
@@ -142,7 +143,9 @@ def load_fbs_team_ids(
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": row.get("team_name", "").strip(),
-                "conference": row.get("conference", "").strip(),
+                "conference": apply_team_conference_override(
+                    team_id, row.get("conference", "").strip()
+                ),
             }
     return teams
 

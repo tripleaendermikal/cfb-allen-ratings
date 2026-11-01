@@ -12,6 +12,7 @@ from typing import Any
 
 from cfb_playoff_odds import matchup_win_prob
 from pac12_week13 import apply_flex_conf_stats_for_cols, is_flex_row
+from cfb_conference_corrections import apply_conference_lookup_overrides
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
 FBS_INDEP = "FBS Indep."
@@ -43,6 +44,7 @@ def load_conference_lookup(
                 if name:
                     name_by_id[tid] = name
                     id_by_name[name] = tid
+    apply_conference_lookup_overrides(by_id)
     return by_id, name_by_id, id_by_name
 
 
