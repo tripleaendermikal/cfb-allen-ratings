@@ -459,7 +459,7 @@ def main() -> int:
             pass
 
     team_summaries = esd.build_team_summaries(
-        teams, leaderboard, conferences, games, n_sims, season_year, mode="in_season"
+        teams, leaderboard, conferences, games, trad_sim_count, season_year, mode="in_season"
     )
     conference_summaries = esd.build_conference_summaries(
         conferences, conference_deep, n_sims, season_year, mode="in_season"

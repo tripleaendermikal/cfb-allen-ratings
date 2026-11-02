@@ -65,6 +65,12 @@ class TeamPageRankingsTest(unittest.TestCase):
         body = response.data.decode()
         self.assertIn("Resume", body)
         self.assertNotIn("UndefinedError", body)
+        season_n = int(self.store.season_sim_count)
+        self.assertIn(f"Win distribution ({season_n} sims)", body)
+        if int(self.store.meta.get("sim_count", season_n)) != season_n:
+            self.assertNotIn(
+                f"Win distribution ({self.store.meta.get('sim_count')} sims)", body
+            )
 
 
 if __name__ == "__main__":
