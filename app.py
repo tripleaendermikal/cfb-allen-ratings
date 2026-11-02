@@ -505,6 +505,15 @@ class DataStore:
         return self.eligibility.get("sim_count", self.meta.get("sim_count", 1000))
 
     @property
+    def season_sim_count(self) -> int:
+        """Monte Carlo count for season wins, game margins, and schedule win % (traditional sims)."""
+        meta = self.meta or {}
+        trad = meta.get("traditional_sim_count")
+        if trad is not None:
+            return int(trad)
+        return int(meta.get("sim_count", 1000))
+
+    @property
     def has_sim_files(self) -> bool:
         return (self._data_dir / "sim" / "0001.json").is_file()
 
@@ -874,6 +883,7 @@ def create_app() -> Flask:
 
         return {
             "meta": store.meta,
+            "season_sim_count": store.season_sim_count,
             "conference_color": CONFERENCE_COLORS,
             "game_url": game_url,
             "preseason_viewer_url": PRESEASON_VIEWER_URL,
