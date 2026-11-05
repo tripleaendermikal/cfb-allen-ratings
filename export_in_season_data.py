@@ -407,7 +407,8 @@ def main() -> int:
         enrich_schedule_scores(schedule, base_rows)
 
     esd.merge_team_sos(teams, leaderboard, esd.build_team_sos(full_schedule))
-    conferences = esd.build_conferences(teams, leaderboard, eligibility["fields"], n_sims)
+    trad_fields = all_fields[:trad_sim_count]
+    conferences = esd.build_conferences(teams, leaderboard, trad_fields, trad_sim_count)
     games = esd.build_games(schedule, conf_by_id, margin_lists)
     enrich_games_scores(games, schedule)
     game_slugs = esd.build_game_slugs(games)
@@ -446,9 +447,9 @@ def main() -> int:
         conferences,
         conf_championship["champions_by_sim"],
         conf_championship["finalists_by_sim"],
-        eligibility["fields"],
+        trad_fields,
         id_to_name,
-        n_sims,
+        trad_sim_count,
     )
 
     season_year = 2026
@@ -462,7 +463,7 @@ def main() -> int:
         teams, leaderboard, conferences, games, trad_sim_count, season_year, mode="in_season"
     )
     conference_summaries = esd.build_conference_summaries(
-        conferences, conference_deep, n_sims, season_year, mode="in_season"
+        conferences, conference_deep, trad_sim_count, season_year, mode="in_season"
     )
 
     brackets_summary = {

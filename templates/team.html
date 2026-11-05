@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from 'macros.html' import chart_assets %}
+{% block sim_count_label %}{{ season_sim_count }}{% endblock %}
 {% block title %}{{ team.team_name }} — CFB Allen Ratings{% endblock %}
 {% block head %}
 {{ chart_assets() }}

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from 'macros.html' import chart_assets %}
+{% block sim_count_label %}{{ season_sim_count }}{% endblock %}
 {% block title %}{{ conf.conference }} — CFB Allen Ratings{% endblock %}
 {% block head %}
 {{ chart_assets() }}
@@ -67,7 +68,7 @@
       <input type="hidden" name="conference" value="{{ conf.conference }}">
       <label>
         Simulation #
-        <input type="number" name="sim" min="1" max="{{ meta.sim_count }}" value="{{ sim_index or '' }}" placeholder="1–{{ meta.sim_count }}">
+        <input type="number" name="sim" min="1" max="{{ season_sim_count }}" value="{{ sim_index or '' }}" placeholder="1–{{ season_sim_count }}">
       </label>
       <button type="submit" class="btn">Look up</button>
     </form>

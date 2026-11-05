@@ -142,20 +142,17 @@ def build_team_theme(team: dict, conference: str) -> dict:
 
 def enrich_conference_teams(conf: dict, store: "DataStore") -> list[dict]:
     ccg = store.conf_championship_summary.get("team_summary", {})
-    bracket = store.brackets_summary.get("team_summary", {})
     enriched = []
     for t in conf["teams"]:
         tid = t["team_id"]
         lb = store.lb_by_id.get(tid, {})
         ccg_t = ccg.get(tid, {})
-        br_t = bracket.get(tid, {})
         wins = ccg_t.get("ccg_wins", 0)
-        field_apps = br_t.get("field_appearances", lb.get("playoff_appearances", 0))
         display_playoff = _leaderboard_playoff_pct(lb, "overall") if lb else None
         display_title = _leaderboard_title_pct(lb, "overall") if lb else None
         row = dict(t)
         row["ccg_wins"] = wins
-        row["playoff_appearances"] = field_apps
+        row["playoff_appearances"] = lb.get("playoff_appearances", t.get("playoff_appearances", 0))
         row["playoff_field_pct"] = (
             display_playoff
             if display_playoff is not None
@@ -1287,8 +1284,8 @@ def create_app() -> Flask:
             if sim_raw:
                 try:
                     sim_index = int(sim_raw)
-                    if sim_index < 1 or sim_index > store.sim_count:
-                        sim_error = f"Sim index must be 1–{store.sim_count}"
+                    if sim_index < 1 or sim_index > store.season_sim_count:
+                        sim_error = f"Sim index must be 1–{store.season_sim_count}"
                     else:
                         sim_snapshot = build_conf_sim_snapshot(store, conf, sim_index - 1)
                         if not sim_snapshot:

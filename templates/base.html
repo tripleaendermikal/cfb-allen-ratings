@@ -27,7 +27,7 @@
       <a href="{{ url_for('fields') }}" class="{% if active == 'fields' %}active{% endif %}">Playoff Fields</a>
       <a href="{{ url_for('conferences') }}" class="{% if active == 'conferences' %}active{% endif %}">Conferences</a>
     </nav>
-    <div class="meta">{{ meta.season_year }} · Week {{ meta.current_week or '—' }} · {{ meta.sim_count }} sims</div>
+    <div class="meta">{{ meta.season_year }} · Week {{ meta.current_week or '—' }} · {% block sim_count_label %}{{ meta.sim_count }}{% endblock %} sims</div>
     <img
       class="navbar-logo"
       src="{{ url_for('static', filename='allen-ratings-logo.png') }}"
