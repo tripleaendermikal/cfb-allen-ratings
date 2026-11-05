@@ -72,6 +72,24 @@ class TeamPageRankingsTest(unittest.TestCase):
                 f"Win distribution ({self.store.meta.get('sim_count')} sims)", body
             )
 
+    def test_conference_detail_sim_lookup_uses_season_sim_count(self) -> None:
+        season_n = int(self.store.season_sim_count)
+        client = create_app().test_client()
+        response = client.get("/conferences?conference=SEC")
+        self.assertEqual(response.status_code, 200)
+        body = response.data.decode()
+        self.assertIn(f'max="{season_n}"', body)
+        self.assertIn(f"1–{season_n}", body)
+        total = int(self.store.meta.get("sim_count", season_n))
+        if total != season_n:
+            self.assertNotIn(f'max="{total}"', body)
+        summary = self.store.conference_summaries.get("summaries", {}).get("SEC", {}).get(
+            "summary", ""
+        )
+        if summary:
+            self.assertNotIn("2000 simulations", summary)
+            self.assertIn(f"{season_n} simulations", summary)
+
 
 if __name__ == "__main__":
     unittest.main()
