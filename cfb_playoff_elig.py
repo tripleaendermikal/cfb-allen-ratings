@@ -9,6 +9,9 @@ Selection (12-team field per simulation):
      (skip H2H if a 3+ team sweep cycle exists in the tier), then conf-champ boost
   4. Top 7 ranked teams not already in the field (Group of 6 teams
      excluded from at-large; G6 access is autobid only)
+  5. No conference may have more than five teams in the 12-team field; later
+     candidates from that conference are skipped and the next team in rank order
+     is considered
 
 Seeding uses the same at-large ranking for seeds 1–11; the G6 qualifier is
 always seed 12.
@@ -37,6 +40,7 @@ GROUP_CONFERENCES = {
 
 AT_LARGE_BIDS = 7
 PLAYOFF_FIELD_SIZE = 12
+MAX_TEAMS_PER_CONFERENCE_IN_FIELD = 5
 ACC_RANKING_WIN_PENALTY = 1.0
 
 SIM_COL_PATTERN = re.compile(r"^sim_\d+$")
@@ -49,6 +53,28 @@ def is_placeholder_team(row: dict) -> bool:
     if tid in PLACEHOLDER_TEAM_IDS:
         return True
     return name == "TBD"
+
+
+def conference_for_index(source_rows: list[dict], index: int) -> str:
+    return (source_rows[index].get("conference") or "").strip()
+
+
+def conference_field_counts(
+    output_rows: list[dict], source_rows: list[dict], col: str
+) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    for i, out in enumerate(output_rows):
+        if int(out.get(col) or 0) == 1:
+            conf = conference_for_index(source_rows, i)
+            if conf:
+                counts[conf] += 1
+    return dict(counts)
+
+
+def conference_at_cap(conf: str, counts: dict[str, int]) -> bool:
+    if not conf:
+        return False
+    return counts.get(conf, 0) >= MAX_TEAMS_PER_CONFERENCE_IN_FIELD
 
 
 def sim_columns(fieldnames):
@@ -518,12 +544,17 @@ def apply_at_large_bids_col(
         h2h_wins_by_col,
         h2h_games_by_col,
     )
+    counts = conference_field_counts(output_rows, source_rows, col)
     added = 0
     for i in ranked:
         if added >= n_bids:
             break
         if int(output_rows[i][col]) != 1:
+            conf = conference_for_index(source_rows, i)
+            if conference_at_cap(conf, counts):
+                continue
             output_rows[i][col] = 1
+            counts[conf] = counts.get(conf, 0) + 1
             added += 1
 
 

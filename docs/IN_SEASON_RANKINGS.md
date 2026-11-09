@@ -101,7 +101,7 @@ Leaderboard mode `mode=forecast_resume`. For each traditional sim (`sim_0001`–
 Each Monte Carlo game sim (`sim_0001`–`sim_1000`) also has a **paired resume-playoff** sim (`sim_1001`–`sim_2000`) with the same game outcomes but:
 
 - End-of-season **resume margins** per team (smoothed `(W+0.5)/(G+1)` record on that sim’s FBS games; opponents fixed at that sim’s FPI draw).
-- **Selection:** P4 champs autobid; highest-resume G6 autobid; Notre Dame autobid if top 12 by resume; remaining slots by resume rank. Teams with **four or more losses** cannot receive a bid unless they won their conference championship in that sim (P4 autobids already satisfy this).
+- **Selection:** P4 champs autobid; highest-resume G6 autobid; Notre Dame autobid if top 12 by resume; remaining slots by resume rank. Teams with **four or more losses** cannot receive a bid unless they won their conference championship in that sim (P4 autobids already satisfy this). No conference may have more than **five** teams in the 12-team field; otherwise the next team in resume rank from another conference is taken instead.
 - **Seeding:** by resume margin (G6 still seed 12).
 
 Pipeline: [`append_resume_playoff_eligibility.py`](append_resume_playoff_eligibility.py) after traditional eligibility in [`run_in_season_sim_pipeline.py`](run_in_season_sim_pipeline.py). Viewer `meta.sim_count` is 2000; leaderboard shows traditional vs resume playoff/title % separately.

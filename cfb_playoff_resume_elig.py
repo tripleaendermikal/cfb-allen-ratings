@@ -9,6 +9,9 @@ from cfb_playoff_elig import (
     GROUP_CONFERENCES,
     NOTRE_DAME_NAME,
     PLAYOFF_FIELD_SIZE,
+    conference_at_cap,
+    conference_field_counts,
+    conference_for_index,
     group_row_indices,
     is_placeholder_team,
     power_four_conf_champion_indices,
@@ -140,10 +143,16 @@ def compute_column_eligibility_resume(
             ),
             reverse=True,
         )
+        counts = conference_field_counts(output_rows, source_rows, col)
         g6_pick = next((i for i in g6_candidates if not blocked(i)), None)
         if g6_pick is not None:
-            eligible.add(g6_pick)
-            output_rows[g6_pick][col] = 1
+            g6_conf = conference_for_index(source_rows, g6_pick)
+            if not conference_at_cap(g6_conf, counts):
+                eligible.add(g6_pick)
+                output_rows[g6_pick][col] = 1
+                counts[g6_conf] = counts.get(g6_conf, 0) + 1
+    else:
+        counts = conference_field_counts(output_rows, source_rows, col)
 
     ranked = resume_rank_indices(source_rows, resume_margins)
     nd_index = next(
@@ -156,9 +165,16 @@ def compute_column_eligibility_resume(
     )
     if nd_index is not None and nd_index in ranked:
         nd_rank = ranked.index(nd_index)
-        if nd_rank < 12 and nd_index not in eligible and not blocked(nd_index):
+        nd_conf = conference_for_index(source_rows, nd_index)
+        if (
+            nd_rank < 12
+            and nd_index not in eligible
+            and not blocked(nd_index)
+            and not conference_at_cap(nd_conf, counts)
+        ):
             eligible.add(nd_index)
             output_rows[nd_index][col] = 1
+            counts[nd_conf] = counts.get(nd_conf, 0) + 1
 
     for i in ranked:
         if len(eligible) >= PLAYOFF_FIELD_SIZE:
@@ -169,8 +185,12 @@ def compute_column_eligibility_resume(
             continue
         if blocked(i):
             continue
+        conf = conference_for_index(source_rows, i)
+        if conference_at_cap(conf, counts):
+            continue
         eligible.add(i)
         output_rows[i][col] = 1
+        counts[conf] = counts.get(conf, 0) + 1
 
 
 def seed_playoff_indices_resume_col(
