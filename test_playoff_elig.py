@@ -135,9 +135,30 @@ class TestPlayoffEligibility(unittest.TestCase):
                     "conference": "SEC",
                 }
             )
+        for i in range(20, 23):
+            teams.append(
+                {
+                    "team_id": str(i),
+                    "team_name": f"BT{i}",
+                    "conference": "Big Ten",
+                }
+            )
         fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
         wins = {t["team_id"]: 10 for t in teams}
-        wins.update({"1": 9, "2": 9, "3": 9, "4": 9, "5": 7, "6": 12, "7": 11})
+        wins.update(
+            {
+                "1": 9,
+                "2": 9,
+                "3": 9,
+                "4": 9,
+                "5": 7,
+                "6": 12,
+                "7": 11,
+                "20": 12,
+                "21": 12,
+                "22": 12,
+            }
+        )
         rows = make_rows(teams, wins, fieldnames)
         champs = {
             "sim_0001": {
@@ -343,6 +364,55 @@ class TestPlayoffEligibility(unittest.TestCase):
         )
         nd_row = next(r for r in out if r["team_id"] == "87")
         self.assertEqual(int(nd_row["sim_0001"]), 0)
+
+    def test_at_most_five_teams_per_conference_in_field(self):
+        teams = [
+            {"team_id": str(i), "team_name": f"SEC{i}", "conference": "SEC"}
+            for i in range(1, 8)
+        ]
+        teams.extend(
+            [
+                {"team_id": "11", "team_name": "BT1", "conference": "Big Ten"},
+                {"team_id": "12", "team_name": "BT2", "conference": "Big Ten"},
+                {"team_id": "20", "team_name": "BT3", "conference": "Big Ten"},
+                {"team_id": "13", "team_name": "ACC1", "conference": "ACC"},
+                {"team_id": "14", "team_name": "ACC2", "conference": "ACC"},
+                {"team_id": "15", "team_name": "B121", "conference": "Big 12"},
+                {"team_id": "16", "team_name": "B122", "conference": "Big 12"},
+                {"team_id": "200", "team_name": "G6", "conference": "MAC"},
+            ]
+        )
+        fieldnames = ["team_id", "team_name", "conference", "sim_0001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        wins.update({str(i): 12 for i in range(1, 8)})
+        wins.update({"11": 12, "13": 12, "15": 12, "20": 11, "200": 6})
+        rows = make_rows(teams, wins, fieldnames)
+        champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "11",
+                "ACC": "13",
+                "Big 12": "15",
+            }
+        }
+        sos = {
+            t["team_id"]: float(t["team_id"]) if t["team_id"].isdigit() else 0.0
+            for t in teams
+        }
+        g6_pts = make_g6_points(teams, "sim_0001", {"200": 99})
+        out = compute_playoff_eligibility(
+            rows, fieldnames, {}, champs, sos, g6_pts
+        )
+        self.assertEqual(eligibility_count(out, "sim_0001"), 12)
+        sec_in = [
+            r["team_id"]
+            for r in out
+            if r["conference"] == "SEC" and int(r["sim_0001"]) == 1
+        ]
+        self.assertEqual(len(sec_in), 5)
+        self.assertIn("1", sec_in)
+        skipped = {"2", "3", "6", "7"} - set(sec_in)
+        self.assertTrue(skipped, "at least one high-win SEC team capped out")
 
 
 class TestPlayoffSeeding(unittest.TestCase):

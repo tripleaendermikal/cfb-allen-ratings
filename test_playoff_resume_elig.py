@@ -92,6 +92,49 @@ class TestResumePlayoffElig(unittest.TestCase):
         g6_idx = next(i for i, t in enumerate(teams) if t["team_id"] == "200")
         self.assertEqual(seeds[-1], g6_idx)
 
+    def test_at_most_five_teams_per_conference_resume(self):
+        teams = [
+            {"team_id": str(i), "team_name": f"SEC{i}", "conference": "SEC"}
+            for i in range(1, 8)
+        ]
+        teams.extend(
+            [
+                {"team_id": "11", "team_name": "BT1", "conference": "Big Ten"},
+                {"team_id": "13", "team_name": "ACC1", "conference": "ACC"},
+                {"team_id": "15", "team_name": "B121", "conference": "Big 12"},
+                {"team_id": "200", "team_name": "G6", "conference": "MAC"},
+            ]
+        )
+        for n in range(30, 38):
+            teams.append(
+                {"team_id": str(n), "team_name": f"BT{n}", "conference": "Big Ten"}
+            )
+        cols = ["sim_0001", "sim_1001"]
+        wins = {t["team_id"]: 8 for t in teams}
+        source = _rows(teams, wins, ["sim_0001"])
+        out = _rows(teams, wins, cols)
+        margins = {t["team_id"]: 1.0 for t in teams}
+        for i in range(1, 8):
+            margins[str(i)] = 100.0 - float(i)
+        margins.update({"11": 50.0, "13": 49.0, "15": 48.0, "200": 200.0})
+        champs = {
+            "sim_0001": {
+                "SEC": "1",
+                "Big Ten": "11",
+                "ACC": "13",
+                "Big 12": "15",
+            }
+        }
+        compute_column_eligibility_resume(
+            out, source, "sim_1001", margins, champs, {}, "sim_0001"
+        )
+        self.assertEqual(sum(int(r["sim_1001"]) for r in out), 12)
+        sec_in = sum(
+            1 for r in out if r["conference"] == "SEC" and int(r["sim_1001"]) == 1
+        )
+        self.assertEqual(sec_in, 5)
+        self.assertEqual(int(next(r for r in out if r["team_id"] == "7")["sim_1001"]), 0)
+
     def test_four_loss_at_large_blocked_conf_champ_ok(self):
         teams = [
             {"team_id": "1", "team_name": "SEC Champ", "conference": "SEC"},
