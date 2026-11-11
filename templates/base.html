@@ -24,6 +24,7 @@
     </nav>
     <nav class="nav-secondary">
       <a href="{{ url_for('compare') }}" class="{% if active == 'compare' %}active{% endif %}">Compare</a>
+      <a href="{{ url_for('matchup') }}" class="{% if active == 'matchup' %}active{% endif %}">Matchup</a>
       <a href="{{ url_for('fields') }}" class="{% if active == 'fields' %}active{% endif %}">Playoff Fields</a>
       <a href="{{ url_for('conferences') }}" class="{% if active == 'conferences' %}active{% endif %}">Conferences</a>
     </nav>

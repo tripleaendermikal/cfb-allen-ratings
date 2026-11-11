@@ -358,6 +358,29 @@ table.data-table tr:hover td { background: var(--surface2); }
 
 .team-picker select { min-width: 220px; }
 
+.matchup-site-fieldset {
+  border: none;
+  padding: 0.75rem 0 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.matchup-site-fieldset legend {
+  padding: 0;
+  margin-right: 0.25rem;
+}
+
+.matchup-site-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
 .field-lookup {
   margin-top: 1.5rem;
 }

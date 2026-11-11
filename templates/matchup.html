@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from 'macros.html' import chart_assets %}
+{% block title %}Matchup — CFB Allen Ratings{% endblock %}
+{% block head %}
+{% if matchup and projection_source == 'schedule' and matchup.margin_histogram %}
+{{ chart_assets() }}
+{% endif %}
+{% endblock %}
+{% block content %}
+<h1>Matchup</h1>
+<p class="subtitle">Pick two teams and a site to see projected margin and win probability</p>
+
+<form class="filters" method="get" id="matchupForm">
+  <div class="team-picker" id="matchupPicker">
+    <select name="a" class="team-select" aria-label="Team A">
+      <option value="">— Team A —</option>
+      {% for t in team_options %}
+      <option value="{{ t.team_id }}" {% if team_a == t.team_id %}selected{% endif %}>
+        {{ t.team_name }}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="b" class="team-select" aria-label="Team B">
+      <option value="">— Team B —</option>
+      {% for t in team_options %}
+      <option value="{{ t.team_id }}" {% if team_b == t.team_id %}selected{% endif %}>
+        {{ t.team_name }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn">Project</button>
+  </div>
+  <fieldset class="matchup-site-fieldset">
+    <legend class="muted">Site</legend>
+    <label class="matchup-site-option">
+      <input type="radio" name="site" value="home_a" {% if site == 'home_a' %}checked{% endif %}>
+      Team A home
+    </label>
+    <label class="matchup-site-option">
+      <input type="radio" name="site" value="home_b" {% if site == 'home_b' %}checked{% endif %}>
+      Team B home
+    </label>
+    <label class="matchup-site-option">
+      <input type="radio" name="site" value="neutral" {% if site == 'neutral' %}checked{% endif %}>
+      Neutral site
+    </label>
+  </fieldset>
+</form>
+
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+{% if matchup and home_theme and away_theme %}
+<div class="game-page">
+  <p class="muted" style="margin-top:0;">
+    {% if projection_source == 'schedule' %}
+    Projection from {{ meta.sim_count }} season simulations (scheduled game).
+    {% else %}
+    Hypothetical site — projection uses current Overall ratings and the same win model as season simulations, not full per-game Monte Carlo.
+    {% endif %}
+  </p>
+
+  <header class="game-hero">
+    <div class="game-hero-side away-side" style="--team-primary: {{ away_theme.primary }}; --team-on-primary: {{ away_theme.on_primary }};">
+      <div class="game-hero-side-inner">
+        {% if away_theme.logo_url %}
+        <div class="team-hero-logo-wrap game-hero-logo-wrap">
+          <img src="{{ away_theme.logo_url }}" alt="" class="team-hero-logo game-hero-logo-sm" width="48" height="48">
+        </div>
+        {% endif %}
+        <div class="game-hero-team-text">
+          <p class="game-hero-role">Away</p>
+          <h2 style="margin:0;font-size:1.25rem;"><a href="{{ url_for('team_detail', team_id=matchup.away_team_id) }}">{{ matchup.away_team_name }}</a></h2>
+          {% if matchup.away_conference %}
+          <span class="team-hero-badge">{{ matchup.away_conference }}</span>
+          {% endif %}
+          {% if matchup.away_fpi is not none %}
+          <p class="game-hero-rating">Rating {{ "%.1f"|format(matchup.away_fpi) }}</p>
+          {% endif %}
+          {% if matchup.away_win_pct is not none %}
+          <p class="game-hero-rating">Win {{ matchup.away_win_pct }}%</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="game-hero-center">
+      <p class="game-hero-site">{% if matchup.neutral_site %}Neutral site{% else %}Home site{% endif %}</p>
+      <div class="game-hero-stats">
+        <div>
+          <div class="game-hero-stat-label">Home win %</div>
+          <div class="game-hero-stat-value">{{ matchup.home_win_pct }}%</div>
+        </div>
+        <div>
+          <div class="game-hero-stat-label">Avg margin</div>
+          <div class="game-hero-stat-value">
+            {% if matchup.avg_margin is not none %}{{ "%.1f"|format(matchup.avg_margin) }}{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:0.85rem;margin:0.5rem 0 0;">Margin is from the home team’s perspective.</p>
+    </div>
+
+    <div class="game-hero-side home-side" style="--team-primary: {{ home_theme.primary }}; --team-on-primary: {{ home_theme.on_primary }};">
+      <div class="game-hero-side-inner">
+        {% if home_theme.logo_url %}
+        <div class="team-hero-logo-wrap game-hero-logo-wrap">
+          <img src="{{ home_theme.logo_url }}" alt="" class="team-hero-logo game-hero-logo-sm" width="48" height="48">
+        </div>
+        {% endif %}
+        <div class="game-hero-team-text">
+          <p class="game-hero-role">Home</p>
+          <h2 style="margin:0;font-size:1.25rem;"><a href="{{ url_for('team_detail', team_id=matchup.home_team_id) }}">{{ matchup.home_team_name }}</a></h2>
+          {% if matchup.home_conference %}
+          <span class="team-hero-badge">{{ matchup.home_conference }}</span>
+          {% endif %}
+          {% if matchup.home_fpi is not none %}
+          <p class="game-hero-rating">Rating {{ "%.1f"|format(matchup.home_fpi) }}</p>
+          {% endif %}
+          {% if matchup.home_win_pct is not none %}
+          <p class="game-hero-rating">Win {{ matchup.home_win_pct }}%</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </header>
+
+  {% if projection_source == 'schedule' and matchup.margin_histogram %}
+  <div class="card game-chart-card">
+    <h2 style="margin-top:0;font-size:1.1rem;">Margin distribution ({{ meta.sim_count }} sims)</h2>
+    <p class="muted" style="margin-top:0;">Home-team margin; negative values favor the away team.</p>
+    <div class="chart-wrap">
+      <canvas id="marginChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <p>
+    <a href="{{ url_for('compare', teams=[matchup.away_team_id, matchup.home_team_id]) }}">Compare these teams →</a>
+    {% if game_page_url %}
+    · <a href="{{ game_page_url }}">Full game page →</a>
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if matchup and projection_source == 'schedule' and matchup.margin_histogram %}
+<script>
+  (function() {
+    const labels = {{ margin_labels | tojson }};
+    const avgMargin = {{ matchup.avg_margin | tojson }};
+    CFBCharts.makeDistributionChart(
+      document.getElementById('marginChart'),
+      labels,
+      {{ margin_data | tojson }},
+      {{ home_theme.primary | tojson }},
+      {
+        xTitle: 'Home margin (points)',
+        yTitle: 'Simulations',
+        xMaxTicks: 10,
+        referenceIndex: CFBCharts.closestLabelIndex(labels, avgMargin),
+        referenceColor: '#f5a524',
+      }
+    );
+  })();
+</script>
+{% endif %}
+{% endblock %}

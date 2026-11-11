@@ -7,6 +7,13 @@ from pathlib import Path
 
 from flask import Flask, abort, render_template, request, url_for
 
+from cfb_matchup import (
+    find_scheduled_games,
+    game_matches_requested_site,
+    matchup_projection_from_schedule,
+    pick_game_for_site,
+    project_from_ratings,
+)
 from cfb_rating.in_season import compute_overall_margin
 
 APP_DIR = Path(__file__).resolve().parent
@@ -1154,6 +1161,127 @@ def create_app() -> Flask:
             chart_datasets=chart_datasets,
             team_options=team_options,
             active="compare",
+        )
+
+    @app.route("/matchup")
+    def matchup():
+        team_a = request.args.get("a", "").strip()
+        team_b = request.args.get("b", "").strip()
+        site = request.args.get("site", "home_a").strip().lower()
+        if site not in ("neutral", "home_a", "home_b"):
+            site = "home_a"
+
+        team_options = store.fbs_teams
+        error = None
+        matchup_data = None
+        projection_source = None
+        scheduled_game = None
+        game_page_url = None
+        margin_labels: list[str] = []
+        margin_data: list[int] = []
+        home_theme = away_theme = None
+        home_team = away_team = None
+        home_row = away_row = None
+
+        if team_a or team_b:
+            if not team_a or not team_b:
+                error = "Select both teams."
+            elif team_a == team_b:
+                error = "Choose two different teams."
+            else:
+                ta = store.teams_by_id.get(team_a)
+                tb = store.teams_by_id.get(team_b)
+                if not ta or not tb or not is_fbs_team(ta) or not is_fbs_team(tb):
+                    error = "Both teams must be valid FBS teams."
+                else:
+                    neutral = site == "neutral"
+                    if site == "home_b":
+                        home_id, away_id = team_b, team_a
+                    else:
+                        home_id, away_id = team_a, team_b
+
+                    home_team = ta if home_id == team_a else tb
+                    away_team = tb if away_id == team_b else ta
+                    home_row = store.team_row_for_week(home_id)
+                    away_row = store.team_row_for_week(away_id)
+                    home_overall = resolve_overall_margin(
+                        home_row, store.lb_by_id.get(home_id, {})
+                    )
+                    away_overall = resolve_overall_margin(
+                        away_row, store.lb_by_id.get(away_id, {})
+                    )
+
+                    if home_overall is None or away_overall is None:
+                        error = "Overall ratings are not available for one or both teams."
+                    else:
+                        candidates = find_scheduled_games(store.games, team_a, team_b)
+                        picked = pick_game_for_site(candidates, home_id, neutral)
+                        if picked and game_matches_requested_site(
+                            picked, home_id, neutral
+                        ):
+                            scheduled_game = picked
+                            projection_source = "schedule"
+                            proj = matchup_projection_from_schedule(picked)
+                            matchup_data = {
+                                "home_team_id": home_id,
+                                "away_team_id": away_id,
+                                "home_team_name": home_team["team_name"],
+                                "away_team_name": away_team["team_name"],
+                                "home_conference": home_team.get("conference", ""),
+                                "away_conference": away_team.get("conference", ""),
+                                **proj,
+                            }
+                            gid = picked.get("game_id")
+                            if gid:
+                                game_page_url = url_for(
+                                    "game_detail",
+                                    game_key=store.game_url_key(str(gid)),
+                                )
+                            margin_labels, margin_data = margin_chart_data(picked)
+                        if matchup_data is None:
+                            projection_source = "ratings"
+                            proj = project_from_ratings(
+                                home_overall,
+                                away_overall,
+                                neutral=neutral,
+                            )
+                            matchup_data = {
+                                "home_team_id": home_id,
+                                "away_team_id": away_id,
+                                "home_team_name": home_team["team_name"],
+                                "away_team_name": away_team["team_name"],
+                                "home_conference": home_team.get("conference", ""),
+                                "away_conference": away_team.get("conference", ""),
+                                "neutral_site": neutral,
+                                "completed": False,
+                                **proj,
+                            }
+
+                        home_theme = build_team_theme(
+                            home_team, home_team.get("conference", "")
+                        )
+                        away_theme = build_team_theme(
+                            away_team, away_team.get("conference", "")
+                        )
+
+        return render_template(
+            "matchup.html",
+            team_a=team_a,
+            team_b=team_b,
+            site=site,
+            team_options=team_options,
+            error=error,
+            matchup=matchup_data,
+            projection_source=projection_source,
+            scheduled_game=scheduled_game,
+            game_page_url=game_page_url,
+            home_theme=home_theme,
+            away_theme=away_theme,
+            home_row=home_row,
+            away_row=away_row,
+            margin_labels=margin_labels,
+            margin_data=margin_data,
+            active="matchup",
         )
 
     @app.route("/fields")
