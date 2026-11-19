@@ -22,19 +22,17 @@
   <p>
     <strong>Resume</strong> starts from each team’s Overall margin and adjusts it so that
     expected win percentage on completed FBS-vs-FBS games (using the same logistic win model as
-    in-season simulations) matches a Bayesian-smoothed record:
-    (wins + 0.5) / (games played + 1). Each team is calibrated independently: opponents keep their
+    in-season simulations) matches the <strong>midpoint of the 50% Clopper–Pearson exact confidence interval</strong>
+    for that team’s wins and FBS games played. Each team is calibrated independently: opponents keep their
     Overall rating during the adjustment. The rating moves by 0.01 points per iteration until
-    expected and Bayesian win rates are within 0.01 or 1,000 iterations are reached. Teams with
+    expected and target win rates are within 0.01 or 1,000 iterations are reached. Teams with
     no FBS games played use Overall as Resume.
   </p>
   <p>
-    <strong>Forecast Resume</strong> uses the same calibration loop as Resume, but the target win rate is
-    <strong>(forecasted wins + 0.5) ÷ (forecasted games played + 1)</strong> (mean wins and mean games from the
-    current in-season simulations, including a conference championship game when the team reaches it).
-    Opponents still use Overall. Teams with no completed FBS games use Overall. Projected wins are from the
-    latest sim run, so historical weeks in the dropdown use that snapshot’s forecast with each week’s
-    completed games through that week.
+    <strong>Forecast Resume</strong> uses the same calibration loop and the same Clopper–Pearson target rule on
+    each simulation’s <strong>integer</strong> end-of-season FBS wins and games played (not a raw mean-win fraction).
+    Opponents still use Overall. For each traditional sim, that yield is averaged across sims for the displayed
+    Forecast Resume margin.
   </p>
 </div>
 
@@ -57,9 +55,9 @@
     <dt>Overall margin</dt>
     <dd>Primary rating blended from preseason and in-season results by games played. Centers each season’s simulated FPI draw; bracket odds use the draw, not this point estimate.</dd>
     <dt>Resume margin</dt>
-    <dd>Overall adjusted to align sim-style expected win% on completed FBS games with Bayesian-smoothed win% (see In-season rankings above).</dd>
+    <dd>Overall adjusted to align sim-style expected win% on completed FBS games with the Clopper–Pearson 50% midpoint (see In-season rankings above).</dd>
     <dt>Forecast Resume margin</dt>
-    <dd>Same as Resume, but the target win rate is forecasted season wins divided by forecasted games played from in-season simulations.</dd>
+    <dd>Mean end-of-season Resume margin across in-season sims (same CP midpoint target on each sim’s FBS record).</dd>
     <dt>No Preseason</dt>
     <dd>Algorithm-only margin rating from completed FBS-vs-FBS results.</dd>
     <dt>Record</dt>
