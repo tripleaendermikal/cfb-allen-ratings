@@ -3,6 +3,7 @@
 
 import unittest
 
+from cfb_rating.clopper_pearson import clopper_pearson_midpoint
 from cfb_rating.rating_algorithm import GameRecord
 from cfb_rating.resume import (
     bayesian_win_pct,
@@ -37,7 +38,14 @@ def _game(
 class TestResumeRating(unittest.TestCase):
     def test_bayesian_win_pct(self):
         self.assertAlmostEqual(bayesian_win_pct(0, 0), 0.5)
-        self.assertAlmostEqual(bayesian_win_pct(10, 12), 10.5 / 13)
+        self.assertAlmostEqual(
+            bayesian_win_pct(10, 12),
+            clopper_pearson_midpoint(10, 12, confidence=0.5),
+        )
+        self.assertAlmostEqual(
+            bayesian_win_pct(10, 10),
+            (0.25**0.1 + 1.0) / 2.0,
+        )
 
     def test_team_record_from_games(self):
         games = [_game("1", "2", 28, 14), _game("3", "1", 21, 24)]
@@ -61,9 +69,18 @@ class TestResumeRating(unittest.TestCase):
         self.assertEqual(result, 12.5)
 
     def test_forecast_target_win_pct(self):
-        self.assertAlmostEqual(forecast_target_win_pct(9.0, 12.0), 9.5 / 13)
-        self.assertAlmostEqual(forecast_target_win_pct(6.0, 12.0), 6.5 / 13)
-        self.assertAlmostEqual(forecast_target_win_pct(9.0, 9.0), 9.5 / 10)
+        self.assertAlmostEqual(
+            forecast_target_win_pct(9.0, 12.0),
+            clopper_pearson_midpoint(9, 12, confidence=0.5),
+        )
+        self.assertAlmostEqual(
+            forecast_target_win_pct(6.0, 12.0),
+            clopper_pearson_midpoint(6, 12, confidence=0.5),
+        )
+        self.assertAlmostEqual(
+            forecast_target_win_pct(9.0, 9.0),
+            clopper_pearson_midpoint(9, 9, confidence=0.5),
+        )
 
     def test_calibration_moves_toward_forecast_target(self):
         games = [_game("1", "2", 35, 7), _game("1", "3", 42, 0)]

@@ -82,7 +82,7 @@ Implementation: [`cfb_rating/opp_adjust.py`](cfb_rating/opp_adjust.py).
 
 ## Resume rating
 
-Separate sort mode on the leaderboard (`mode=resume`). Starts from **Overall** and iteratively adjusts each team’s rating (±0.01 per step, max 1,000) until **expected win%** on completed FBS-vs-FBS games matches smoothed win% `(W+0.5)/(G+1)` within 0.01.
+Separate sort mode on the leaderboard (`mode=resume`). Starts from **Overall** and iteratively adjusts each team’s rating (±0.01 per step, max 1,000) until **expected win%** on completed FBS-vs-FBS games matches the **midpoint of the 50% Clopper–Pearson exact interval** for wins and FBS games played within 0.01.
 
 - **Expected win%:** same logistic as in-season sims (`cfb_rating/win_prob.py`), with the team under calibration using the current resume value and every opponent using **Overall** (fixed).
 - **0 FBS games:** Resume = Overall.
@@ -100,7 +100,7 @@ Leaderboard mode `mode=forecast_resume`. For each traditional sim (`sim_0001`–
 
 Each Monte Carlo game sim (`sim_0001`–`sim_1000`) also has a **paired resume-playoff** sim (`sim_1001`–`sim_2000`) with the same game outcomes but:
 
-- End-of-season **resume margins** per team (smoothed `(W+0.5)/(G+1)` record on that sim’s FBS games; opponents fixed at that sim’s FPI draw).
+- End-of-season **resume margins** per team (same Clopper–Pearson 50% midpoint target on that sim’s integer FBS W–L; opponents fixed at that sim’s FPI draw).
 - **Selection:** P4 champs autobid; highest-resume G6 autobid; Notre Dame autobid if top 12 by resume; remaining slots by resume rank. Teams with **four or more losses** cannot receive a bid unless they won their conference championship in that sim (P4 autobids already satisfy this). No conference may have more than **five** teams in the 12-team field; otherwise the next team in resume rank from another conference is taken instead.
 - **Seeding:** by resume margin (G6 still seed 12).
 

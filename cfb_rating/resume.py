@@ -1,9 +1,13 @@
-"""Resume margin: calibrate Overall to Bayesian win% via sim win probabilities."""
+"""Resume margin: calibrate Overall to target win% via sim win probabilities."""
 
 from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+from cfb_rating.clopper_pearson import (
+    RESUME_TARGET_CONFIDENCE,
+    clopper_pearson_midpoint,
+)
 from cfb_rating.rating_algorithm import GameRecord
 from cfb_rating.win_prob import team_win_probability
 
@@ -13,21 +17,29 @@ WIN_PCT_TOLERANCE = 0.01
 
 
 def smoothed_win_pct(wins: float, games: float) -> float:
-    """Prior-smoothed win rate: +0.5 wins and +1 game (resume and forecast resume)."""
+    """Legacy prior-smoothed win rate: +0.5 wins and +1 game (not used for resume)."""
     if games < 0:
         return 0.0
     return (wins + 0.5) / (games + 1)
 
 
 def bayesian_win_pct(wins: int, games: int) -> float:
-    return smoothed_win_pct(float(wins), float(games))
+    """Resume target win rate: midpoint of the 50% Clopper–Pearson interval."""
+    if games < 1:
+        return 0.5
+    return clopper_pearson_midpoint(wins, games, confidence=RESUME_TARGET_CONFIDENCE)
 
 
 def forecast_target_win_pct(projected_wins: float, projected_games: float) -> float:
-    """Smoothed projected season win rate (same prior as actual resume)."""
+    """Projected target win rate (rounded W/G, same CP midpoint as resume)."""
     if projected_games <= 0:
         return 0.0
-    return smoothed_win_pct(projected_wins, projected_games)
+    k = int(round(projected_wins))
+    n = int(round(projected_games))
+    if n < 1:
+        return 0.0
+    k = max(0, min(k, n))
+    return clopper_pearson_midpoint(k, n, confidence=RESUME_TARGET_CONFIDENCE)
 
 
 def team_record_from_games(
