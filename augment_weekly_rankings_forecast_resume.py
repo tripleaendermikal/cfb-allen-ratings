@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 from cfb_paths import data_root
@@ -21,17 +20,24 @@ DEFAULT_GAMES_FPI = data_root() / f"{IN_SEASON_PREFIX}_fbs_games_with_fpi.csv"
 DEFAULT_CONFERENCES = data_root() / "espn_cfb_teams_conferences.csv"
 
 
-DEFAULT_META = data_root().parent / "data" / "meta.json"
+def resolve_forecast_week(
+    explicit: int | None,
+    *,
+    games_fpi_rows: list[dict[str, str]] | None,
+) -> int | None:
+    """Week to compute mean sim forecast resume (not copy resume_margin).
 
-
-def resolve_forecast_week(explicit: int | None) -> int | None:
+    Uses completed games in the in-season FPI export. ``data/meta.json`` is
+    intentionally not used: export updates meta after this step in the weekly
+    pipeline, so meta.current_week lags the rankings row we need."""
     if explicit is not None:
         return explicit
-    if DEFAULT_META.is_file():
-        current = json.loads(DEFAULT_META.read_text()).get("current_week")
-        if current:
-            return int(current)
-    return None
+    if not games_fpi_rows:
+        return None
+    from export_in_season_data import infer_current_week_from_games
+
+    inferred = infer_current_week_from_games(games_fpi_rows)
+    return inferred if inferred > 0 else None
 
 
 def main() -> int:
@@ -58,12 +64,18 @@ def main() -> int:
     _, records_rows = esd.read_csv(args.records)
     _, game_rows = esd.read_csv(args.games_sim)
     sim_cols = esd.sim_columns(list(records_rows[0].keys()) if records_rows else [])
+    _, games_fpi_rows = (
+        esd.read_csv(args.games_fpi) if args.games_fpi.is_file() else ([], [])
+    )
 
     count = augment_weekly_rankings_csv_forecast_resume(
         args.rankings,
         game_rows,
         sim_cols,
-        forecast_week=resolve_forecast_week(args.forecast_week),
+        forecast_week=resolve_forecast_week(
+            args.forecast_week,
+            games_fpi_rows=games_fpi_rows or None,
+        ),
     )
     print(f"Updated forecast_resume_margin on {count} rows in {args.rankings}")
     return 0
