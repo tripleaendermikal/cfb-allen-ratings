@@ -177,3 +177,5 @@ Commit `data/previous_years.json` after export so Render picks up the tab withou
 Bootstrap groups everything after conference championship weekend (December bowls, CFP, January playoffs) into a single **Postseason** week so rankings and records reflect the full bowl/CFP path without separate weekly slices. Choose **Postseason** in the week dropdown for end-of-year Overall/Resume and W–L.
 
 Display **Record** on Previous Years counts **all games for that FBS team** (including FCS opponents). Overall and Resume rankings still use **FBS vs FBS** games only.
+
+Conference badges use `data/historical_team_conferences.json` (ESPN standings by season), not current `espn_cfb_teams_conferences.csv`. Regenerate with `python build_historical_team_conferences.py` and re-export prior seasons when memberships change.

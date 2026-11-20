@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from cfb_historical_conferences import apply_season_conferences_to_team_info
 from cfb_paths import REPO_ROOT, data_root
 from cfb_rating.in_season import (
     InSeasonRankingRow,
@@ -266,6 +267,7 @@ def main() -> int:
         if g.home_team_id in fbs_ids or g.away_team_id in fbs_ids
     ]
     team_ids = sorted(fbs_ids)
+    team_info = apply_season_conferences_to_team_info(team_info, args.season)
     preseason_full = dict(preseason_margins)
     for tid in team_ids:
         preseason_full.setdefault(tid, 0.0)
