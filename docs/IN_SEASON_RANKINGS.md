@@ -148,3 +148,25 @@ Render auto-redeploys from committed `data/` JSON.
 | `export_in_season_data.py` | Viewer JSON export |
 
 Shared libraries: `cfb_playoff_elig.py`, `cfb_playoff_odds.py`, `cfb_conf_championship.py`, `cfb_g6_playoff_points.py`, `cfb_espn_summary.py`, `cfb_game_corrections.py`, `cfb_rating/`.
+
+## Previous years (archive tab)
+
+The **Previous Years** tab serves committed JSON (`data/previous_years.json`) with **Overall** and **Resume** margins by week, using the same in-season formulas as the live model (no sims / forecast resume).
+
+**One-time or refresh export (local machine, with `CFB_DATA_ROOT` data):**
+
+```powershell
+# If you lack gitignored 2025 CSVs, bootstrap ESPN games + FPI preseason:
+python bootstrap_prior_season_data.py --season 2025
+
+# Prefer your own Preseason_2025_blended.csv (Allen combined_FPI) over the ESPN FPI bootstrap.
+python export_previous_years.py --season 2025
+```
+
+| File under `CFB_DATA_ROOT` | Role |
+|--------------------------|------|
+| `cfb_2025_espn_games.csv` | Completed FBS games with yards |
+| `Preseason_2025_blended.csv` | `combined_FPI` anchor |
+| `cfb_2025_fbs_margin_ratings.csv` | Optional: 2025 team names / conferences |
+
+Commit `data/previous_years.json` after export so Render picks up the tab without private CSVs.

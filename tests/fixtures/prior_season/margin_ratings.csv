@@ -1,0 +1,5 @@
+team_id,team_name,conference,rating,r,rs,margin_rating
+1,Team A,SEC,10,0,0,5
+2,Team B,SEC,5,0,0,2.5
+3,Team C,SEC,8,0,0,4
+4,Team D,SEC,2,0,0,1

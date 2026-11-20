@@ -1,0 +1,5 @@
+game_id,season,week,game_date_utc,neutral_site,home_team_id,home_team,home_points,home_total_yards,away_team_id,away_team,away_points,away_total_yards
+g1,2025,5,2025-10-01,false,1,Team A,28,400,2,Team B,21,380
+g2,2025,6,2025-10-08,false,2,Team B,17,350,1,Team A,24,420
+g3,2025,5,2025-10-02,false,3,Team C,35,450,4,Team D,10,300
+g4,2025,6,2025-10-09,false,4,Team D,14,320,3,Team C,31,410

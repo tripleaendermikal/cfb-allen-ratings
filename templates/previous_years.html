@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Previous Years — CFB Allen Ratings{% endblock %}
+{% block sim_count_label %}—{% endblock %}
+{% block content %}
+<h1>Previous Years</h1>
+<p class="subtitle">{{ season }} season · Week {{ week }} · Overall &amp; Resume (same formulas as in-season model)</p>
+
+<form class="filters" method="get">
+  <label>
+    Season
+    <select name="season" onchange="this.form.submit()">
+      {% for s in seasons %}
+      <option value="{{ s }}" {% if s == season %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Week
+    <select name="week" onchange="this.form.submit()">
+      {% for w in weeks %}
+      <option value="{{ w }}" {% if w == week %}selected{% endif %}>Week {{ w }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Ranking
+    <select name="mode" onchange="this.form.submit()">
+      <option value="overall" {% if ranking_mode == 'overall' %}selected{% endif %}>Overall</option>
+      <option value="resume" {% if ranking_mode == 'resume' %}selected{% endif %}>Resume</option>
+    </select>
+  </label>
+  <label>
+    Conference
+    <select name="conference" onchange="this.form.submit()">
+      <option value="">All conferences</option>
+      {% for c in conferences %}
+      <option value="{{ c }}" {% if c == conf_filter %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Search
+    <input type="search" id="previous-years-search" placeholder="Filter teams…">
+  </label>
+  {% if conf_filter or ranking_mode != 'overall' %}
+  <a href="{{ url_for('previous_years', season=season, week=week) }}" class="btn" style="text-decoration:none;display:inline-block;">Reset filters</a>
+  {% endif %}
+</form>
+
+<div class="table-scroll">
+<table class="data-table" id="previous-years-table">
+  <thead>
+    <tr>
+      <th data-sort="num">#</th>
+      <th data-sort="text">Team</th>
+      <th data-sort="text">Conference</th>
+      {% if ranking_mode == 'resume' %}
+      <th data-sort="num">Resume</th>
+      {% else %}
+      <th data-sort="num">Overall</th>
+      {% endif %}
+      <th data-sort="text">Record</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="num" data-value="{{ row.display_rank }}">{{ row.display_rank }}</td>
+      <td data-value="{{ row.team_name }}">
+        <a href="{{ url_for('team_detail', team_id=row.team_id) }}">{{ row.team_name }}</a>
+      </td>
+      <td data-value="{{ row.conference }}">
+        {% if row.conference %}
+        <span class="badge" style="background:{{ row.conference | conf_color }}">{{ row.conference }}</span>
+        {% endif %}
+      </td>
+      {% if ranking_mode == 'resume' %}
+      <td class="num" data-value="{{ row.resume_margin if row.resume_margin is not none else '' }}">
+        {% if row.resume_margin is not none %}{{ "%+.1f"|format(row.resume_margin) }}{% else %}—{% endif %}
+      </td>
+      {% else %}
+      <td class="num" data-value="{{ row.overall_margin if row.overall_margin is not none else '' }}">
+        {% if row.overall_margin is not none %}{{ "%+.1f"|format(row.overall_margin) }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+      <td class="num" data-value="{{ row.record or '' }}">{{ row.record or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  filterTableRows('previous-years-search', '#previous-years-table');
+</script>
+{% endblock %}

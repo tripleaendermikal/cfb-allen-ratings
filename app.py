@@ -360,6 +360,7 @@ class DataStore:
         self._legacy_brackets: dict | None = None
         self._legacy_conf_championship: dict | None = None
         self._legacy_eligibility_fields: list | None = None
+        self._previous_years: dict | None = None
 
         self.teams_by_id = {t["team_id"]: t for t in self.teams}
         slug_data = self._load_optional(data_dir / "game_slugs.json") or {}
@@ -551,6 +552,77 @@ class DataStore:
             data = self._load_optional(self._data_dir / "last_year.json")
             self._last_year = data if isinstance(data, dict) else {}
         return self._last_year
+
+    @property
+    def previous_years(self) -> dict:
+        if self._previous_years is None:
+            data = self._load_optional(self._data_dir / "previous_years.json")
+            self._previous_years = data if isinstance(data, dict) else {"seasons": {}}
+        return self._previous_years
+
+    def available_prior_seasons(self) -> list[int]:
+        seasons = self.previous_years.get("seasons") or {}
+        out: list[int] = []
+        for key in seasons:
+            try:
+                out.append(int(key))
+            except ValueError:
+                continue
+        return sorted(out)
+
+    def prior_season_payload(self, season_year: int) -> dict:
+        return (self.previous_years.get("seasons") or {}).get(str(season_year)) or {}
+
+    def prior_season_weeks(self, season_year: int) -> list[int]:
+        payload = self.prior_season_payload(season_year)
+        weeks = payload.get("weeks") or []
+        return sorted(int(w) for w in weeks)
+
+    def prior_conference_names(self, season_year: int, week: int) -> list[str]:
+        rows = (self.prior_season_payload(season_year).get("by_week") or {}).get(
+            str(week), []
+        )
+        names = {
+            r.get("conference", "")
+            for r in rows
+            if is_fbs_conference(r.get("conference", ""))
+        }
+        return sorted(names)
+
+    def previous_season_rows(
+        self,
+        season_year: int,
+        week: int,
+        ranking_mode: str = "overall",
+    ) -> list[dict]:
+        payload = self.prior_season_payload(season_year)
+        by_week = payload.get("by_week") or {}
+        raw_rows = list(by_week.get(str(week)) or [])
+        rows: list[dict] = []
+        for row in raw_rows:
+            if not is_fbs_conference(row.get("conference", "")):
+                continue
+            rows.append(dict(row))
+
+        if ranking_mode == "resume":
+            rows.sort(
+                key=lambda r: (
+                    r.get("resume_margin") is None,
+                    -(r.get("resume_margin") or -999),
+                    (r.get("team_name") or "").lower(),
+                )
+            )
+        else:
+            rows.sort(
+                key=lambda r: (
+                    r.get("overall_margin") is None,
+                    -(r.get("overall_margin") or -999),
+                    (r.get("team_name") or "").lower(),
+                )
+            )
+        for idx, row in enumerate(rows, start=1):
+            row["display_rank"] = idx
+        return rows
 
     @property
     def brackets_summary(self) -> dict:
@@ -1026,6 +1098,53 @@ def create_app() -> Flask:
             weeks=store.ranking_weeks,
             ranking_mode=ranking_mode,
             active="leaderboard",
+        )
+
+    @app.route("/previous-years")
+    def previous_years():
+        seasons = store.available_prior_seasons()
+        if not seasons:
+            abort(404)
+        season_raw = request.args.get("season", "").strip()
+        try:
+            season = int(season_raw) if season_raw else seasons[-1]
+        except ValueError:
+            season = seasons[-1]
+        if season not in seasons:
+            season = seasons[-1]
+
+        payload = store.prior_season_payload(season)
+        weeks = store.prior_season_weeks(season)
+        default_week = int(payload.get("final_week") or (weeks[-1] if weeks else 1))
+        week_raw = request.args.get("week", "").strip()
+        try:
+            week = int(week_raw) if week_raw else default_week
+        except ValueError:
+            week = default_week
+        if week not in weeks:
+            week = default_week
+
+        ranking_mode = request.args.get("mode", "overall").strip().lower()
+        if ranking_mode not in ("overall", "resume"):
+            ranking_mode = "overall"
+
+        conf_filter = request.args.get("conference", "").strip()
+        rows = store.previous_season_rows(season, week, ranking_mode=ranking_mode)
+        if conf_filter:
+            rows = [r for r in rows if r.get("conference") == conf_filter]
+
+        conferences = store.prior_conference_names(season, week)
+        return render_template(
+            "previous_years.html",
+            rows=rows,
+            season=season,
+            seasons=seasons,
+            week=week,
+            weeks=weeks,
+            ranking_mode=ranking_mode,
+            conferences=conferences,
+            conf_filter=conf_filter,
+            active="previous_years",
         )
 
     @app.route("/team/<team_id>")
