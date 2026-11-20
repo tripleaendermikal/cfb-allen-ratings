@@ -578,6 +578,20 @@ class DataStore:
         weeks = payload.get("weeks") or []
         return sorted(int(w) for w in weeks)
 
+    def prior_season_week_labels(self, season_year: int) -> dict[str, str]:
+        payload = self.prior_season_payload(season_year)
+        labels = payload.get("week_labels")
+        if isinstance(labels, dict):
+            return {str(k): str(v) for k, v in labels.items()}
+        post = payload.get("postseason_week")
+        if post is not None:
+            return {str(int(post)): "Postseason"}
+        return {}
+
+    def prior_season_week_display(self, season_year: int, week: int) -> str:
+        labels = self.prior_season_week_labels(season_year)
+        return labels.get(str(week), f"Week {week}")
+
     def prior_conference_names(self, season_year: int, week: int) -> list[str]:
         rows = (self.prior_season_payload(season_year).get("by_week") or {}).get(
             str(week), []
@@ -1134,6 +1148,8 @@ def create_app() -> Flask:
             rows = [r for r in rows if r.get("conference") == conf_filter]
 
         conferences = store.prior_conference_names(season, week)
+        week_labels = store.prior_season_week_labels(season)
+        week_display = store.prior_season_week_display(season, week)
         return render_template(
             "previous_years.html",
             rows=rows,
@@ -1141,6 +1157,8 @@ def create_app() -> Flask:
             seasons=seasons,
             week=week,
             weeks=weeks,
+            week_labels=week_labels,
+            week_display=week_display,
             ranking_mode=ranking_mode,
             conferences=conferences,
             conf_filter=conf_filter,
