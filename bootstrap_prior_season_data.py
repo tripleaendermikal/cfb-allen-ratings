@@ -179,26 +179,23 @@ def attach_yards(games: dict[str, dict], sleep_s: float = 0.05) -> None:
 
 
 def renumber_postseason_weeks(games: dict[str, dict], season_year: int) -> int:
-    """ESPN labels Jan bowls/playoffs as week 1; assign sequential weeks after the regular season."""
-    jan_prefix = f"{season_year + 1}-01-"
-    season_start = f"{season_year}-07-01"
-    postseason: list[dict] = []
-    regular: list[dict] = []
-    for row in games.values():
-        date = (row.get("game_date_utc") or "")[:10]
-        if date.startswith(jan_prefix):
-            postseason.append(row)
-        elif date >= season_start:
-            regular.append(row)
+    """Assign bowls/CFP (incl. ESPN's mislabeled weeks) to one week after conference championships."""
+    from cfb_rating.season_data import (
+        espn_regular_season_max_week,
+        is_espn_postseason_row,
+        normalize_espn_rows_single_postseason,
+    )
 
-    reg_weeks = [
-        int(r.get("week") or 0) for r in regular if 0 < int(r.get("week") or 0) <= 20
-    ]
-    reg_max = max(reg_weeks) if reg_weeks else 0
-    postseason.sort(key=lambda r: (r.get("game_date_utc", ""), r["game_id"]))
-    for idx, row in enumerate(postseason):
-        row["week"] = reg_max + 1 + idx
-    return len(postseason)
+    rows = list(games.values())
+    reg_max = espn_regular_season_max_week(rows, season_year)
+    to_move = sum(
+        1
+        for r in rows
+        if is_espn_postseason_row(r, season_year)
+        or (reg_max and int(r.get("week") or 0) > reg_max)
+    )
+    normalize_espn_rows_single_postseason(rows, season_year)
+    return to_move
 
 
 def write_espn_games(path: Path, games: dict[str, dict]) -> int:

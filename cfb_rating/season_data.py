@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Union
 
 from cfb_game_corrections import (
     get_score_overrides,
@@ -150,11 +150,89 @@ def load_fbs_team_ids(
     return teams
 
 
+POSTSEASON_MONTH_START = "-12-14"
+
+
+def is_espn_postseason_row(row: dict, season_year: int) -> bool:
+    """Bowls/CFP: January, or mid-December onward (after typical CCG weekend)."""
+    date = (row.get("game_date_utc") or "")[:10]
+    if not date:
+        return False
+    if date.startswith(f"{season_year + 1}-01-"):
+        return True
+    if date[:4] == str(season_year) and date[5:7] == "12":
+        if date >= f"{season_year}{POSTSEASON_MONTH_START}":
+            return True
+        week = int(row.get("week") or 0)
+        if week <= 1:
+            return True
+    return False
+
+
+def espn_regular_season_max_week(rows: Iterable[dict], season_year: int) -> int:
+    """Highest week number among in-season games (excludes bowls/playoffs)."""
+    season_start = f"{season_year}-07-01"
+    weeks: list[int] = []
+    for row in rows:
+        date = (row.get("game_date_utc") or "")[:10]
+        if not date or date < season_start:
+            continue
+        if is_espn_postseason_row(row, season_year):
+            continue
+        week = int(row.get("week") or 0)
+        # Through conference championship weekend; Army–Navy / bowls fold into postseason.
+        if 0 < week <= 15:
+            weeks.append(week)
+    return max(weeks) if weeks else 0
+
+
+def normalize_espn_rows_single_postseason(
+    rows: list[dict],
+    season_year: int,
+) -> tuple[int, int]:
+    """Put all postseason games on one week (regular final + 1). Returns (reg_max, post_week)."""
+    reg_max = espn_regular_season_max_week(rows, season_year)
+    if not reg_max:
+        return 0, 0
+    post_week = reg_max + 1
+    for row in rows:
+        week = int(row.get("week") or 0)
+        if is_espn_postseason_row(row, season_year) or week > reg_max:
+            row["week"] = str(post_week)
+    return reg_max, post_week
+
+
+def collapse_games_single_postseason_week(
+    games: Sequence[GameRecord],
+) -> tuple[list[GameRecord], int, int | None]:
+    """Fold weeks after the contiguous regular block into one postseason week."""
+    weeks_present = {g.week for g in games if g.week is not None and g.week > 0}
+    reg_final = 0
+    w = 1
+    while w in weeks_present:
+        reg_final = w
+        w += 1
+    if not reg_final:
+        reg_final = max(weeks_present) if weeks_present else 14
+    post_week = reg_final + 1
+    if not any((g.week or 0) > reg_final for g in games):
+        return list(games), reg_final, None
+    out: list[GameRecord] = []
+    for game in games:
+        if (game.week or 0) > reg_final:
+            out.append(game.replace(week=post_week))
+        else:
+            out.append(game)
+    return out, reg_final, post_week
+
+
 def load_espn_games(
     path: Union[str, Path] = DEFAULT_ESPN_GAMES_CSV,
     *,
     fbs_only: bool = True,
     teams_path: Union[str, Path] = DEFAULT_ESPN_TEAMS_CSV,
+    season_year: int | None = None,
+    single_postseason_week: bool = False,
 ) -> List[GameRecord]:
     """Load completed games from the ESPN games export."""
     path = Path(path)
@@ -162,7 +240,12 @@ def load_espn_games(
     games: List[GameRecord] = []
 
     with path.open(encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
+        rows = list(csv.DictReader(handle))
+
+    if single_postseason_week and season_year is not None:
+        normalize_espn_rows_single_postseason(rows, season_year)
+
+    for row in rows:
             home_team_id = row["home_team_id"].strip()
             away_team_id = row["away_team_id"].strip()
 

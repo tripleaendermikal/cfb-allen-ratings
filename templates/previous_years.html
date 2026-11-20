@@ -3,7 +3,7 @@
 {% block sim_count_label %}—{% endblock %}
 {% block content %}
 <h1>Previous Years</h1>
-<p class="subtitle">{{ season }} season · Week {{ week }} · Overall &amp; Resume (same in-season methodology)</p>
+<p class="subtitle">{{ season }} season · {{ week_display }} · Overall &amp; Resume (same formulas as in-season model)</p>
 
 <form class="filters" method="get">
   <label>
@@ -18,7 +18,7 @@
     Week
     <select name="week" onchange="this.form.submit()">
       {% for w in weeks %}
-      <option value="{{ w }}" {% if w == week %}selected{% endif %}>Week {{ w }}</option>
+      <option value="{{ w }}" {% if w == week %}selected{% endif %}>{{ week_labels.get(w|string, 'Week ' ~ w) }}</option>
       {% endfor %}
     </select>
   </label>

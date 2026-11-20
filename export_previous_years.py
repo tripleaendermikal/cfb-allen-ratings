@@ -116,6 +116,7 @@ def build_season_export(
     max_week: int,
     record_games: Sequence[GameRecord] | None = None,
     iterations: int = 1000,
+    regular_season_final_week: int | None = None,
 ) -> dict:
     """Rankings use ``games`` (FBS vs FBS); display records may use ``record_games`` (+ FCS)."""
     rec_source = list(record_games) if record_games is not None else list(games)
@@ -143,7 +144,18 @@ def build_season_export(
         by_week_json[str(week)] = entries
 
     final_week = weeks[-1] if weeks else 0
-    return {
+    reg_final = regular_season_final_week
+    if reg_final is None:
+        reg_final = 0
+        for w in weeks:
+            if w == reg_final + 1:
+                reg_final = w
+            else:
+                break
+    postseason_week = (
+        final_week if reg_final and final_week > reg_final else None
+    )
+    payload = {
         "season_year": season_year,
         "final_week": final_week,
         "weeks": weeks,
@@ -151,6 +163,11 @@ def build_season_export(
         "max_week": max_week,
         "by_week": by_week_json,
     }
+    if postseason_week is not None and postseason_week > 1:
+        payload["postseason_week"] = postseason_week
+        payload["regular_season_final_week"] = postseason_week - 1
+        payload["week_labels"] = {str(postseason_week): "Postseason"}
+    return payload
 
 
 def write_previous_years_json(
@@ -193,6 +210,8 @@ def main() -> int:
     margin_path = args.margin_ratings or defaults["margin_ratings"]
     teams_path = args.teams or defaults["teams"]
 
+    from cfb_rating.season_data import espn_regular_season_max_week
+
     if not games_path.is_file():
         print(
             f"Missing games CSV: {games_path}\n"
@@ -207,8 +226,15 @@ def main() -> int:
         return 1
 
     margin_info = load_team_info_from_margin_ratings(margin_path)
+    with games_path.open(encoding="utf-8-sig", newline="") as handle:
+        espn_rows = list(csv.DictReader(handle))
+    regular_season_final = espn_regular_season_max_week(espn_rows, args.season)
     all_games = load_espn_games(
-        games_path, fbs_only=False, teams_path=teams_path
+        games_path,
+        fbs_only=False,
+        teams_path=teams_path,
+        season_year=args.season,
+        single_postseason_week=True,
     )
 
     from cfb_rating.season_data import load_fbs_team_ids
@@ -261,6 +287,7 @@ def main() -> int:
         max_week=max_week,
         record_games=record_games,
         iterations=args.iterations,
+        regular_season_final_week=regular_season_final or None,
     )
     season_payload["sources"] = {
         "games": str(games_path),
