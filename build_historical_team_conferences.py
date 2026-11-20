@@ -136,12 +136,21 @@ def main() -> int:
         "--seasons",
         type=int,
         nargs="+",
-        default=[2021, 2022, 2023, 2024, 2025],
+        default=[2019, 2021, 2022, 2023, 2024, 2025],
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
     seasons: dict[str, dict[str, str]] = {}
+    if args.output.is_file():
+        existing = json.loads(args.output.read_text(encoding="utf-8"))
+        prior = existing.get("seasons")
+        if isinstance(prior, dict):
+            seasons = {
+                str(k): {str(tid): str(c) for tid, c in v.items()}
+                for k, v in prior.items()
+                if isinstance(v, dict)
+            }
     for year in args.seasons:
         print(f"Fetching {year}…", flush=True)
         seasons[str(year)] = fetch_season_conferences(year)
