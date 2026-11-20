@@ -46,6 +46,8 @@ CONFERENCE_COLORS = {
     "Sun Belt": "#f15a22",
     "MAC": "#006633",
     "CUSA": "#00a3e0",
+    "WAC": "#4a2d7a",
+    "Big East": "#003087",
     "FBS Indep.": "#555555",
     "Unknown": "#666666",
 }

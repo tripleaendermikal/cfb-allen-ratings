@@ -250,6 +250,8 @@ def main() -> int:
         if conf and is_fbs_team({"conference": conf}):
             team_info[tid] = {**team_info[tid], "conference": conf}
 
+    team_info = apply_season_conferences_to_team_info(team_info, args.season)
+
     preseason_margins = load_preseason_margins(
         preseason_path,
         teams_path=teams_path,
@@ -267,7 +269,6 @@ def main() -> int:
         if g.home_team_id in fbs_ids or g.away_team_id in fbs_ids
     ]
     team_ids = sorted(fbs_ids)
-    team_info = apply_season_conferences_to_team_info(team_info, args.season)
     preseason_full = dict(preseason_margins)
     for tid in team_ids:
         preseason_full.setdefault(tid, 0.0)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -19,6 +20,22 @@ STANDINGS_URL = (
 
 DEFAULT_OUTPUT = REPO_ROOT / "data" / "historical_team_conferences.json"
 FBS_GROUP_ID = "80"
+FPI_URL = (
+    "https://site.web.api.espn.com/apis/fitt/v3/sports/football/college-football/"
+    "powerindex?region=us&lang=en&season={year}&sort=fpi.fpi%3Adesc&limit=500"
+)
+TEAM_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/football/college-football/"
+    "teams/{tid}?season={year}"
+)
+
+# ESPN drops some defunct conferences from the FBS standings tree; fetch by group id.
+SUPPLEMENTAL_GROUPS: list[tuple[str, int, int]] = [
+    ("16", 2007, 2012),  # Western Athletic Conference
+    ("10", 2007, 2013),  # Big East (pre-realignment football)
+]
+
+_STANDING_CONF_RE = re.compile(r"\bin\s+(.+?)(?:\s+-\s+|$)", re.IGNORECASE)
 
 _NAME_TO_CANONICAL = {
     "American Conference": "American",
@@ -34,6 +51,10 @@ _NAME_TO_CANONICAL = {
     "Pac-12 Conference": "Pac-12",
     "Southeastern Conference": "SEC",
     "Sun Belt Conference": "Sun Belt",
+    "Western Athletic Conference": "WAC",
+    "WAC": "WAC",
+    "Big East Conference": "Big East",
+    "Big East": "Big East",
 }
 
 
@@ -65,6 +86,26 @@ def canonical_conference(name: str) -> str:
     return raw
 
 
+def conference_from_standing(summary: str) -> str | None:
+    match = _STANDING_CONF_RE.search(summary or "")
+    if not match:
+        return None
+    raw = match.group(1).strip()
+    if raw.upper() == "FBS":
+        return None
+    return canonical_conference(raw)
+
+
+def fpi_team_ids(season_year: int) -> list[str]:
+    data = fetch_json(FPI_URL.format(year=season_year))
+    ids: list[str] = []
+    for entry in data.get("teams") or []:
+        tid = str((entry.get("team") or {}).get("id") or "").strip()
+        if tid:
+            ids.append(tid)
+    return ids
+
+
 def standings_entries(data: dict) -> list[dict]:
     standings = data.get("standings")
     if isinstance(standings, dict):
@@ -74,6 +115,69 @@ def standings_entries(data: dict) -> list[dict]:
     if isinstance(standings, list):
         return standings
     return []
+
+
+def merge_standings_group(
+    season_year: int,
+    group_id: str,
+    out: dict[str, str],
+    *,
+    sleep_s: float,
+) -> None:
+    time.sleep(sleep_s)
+    try:
+        conf_data = fetch_json(
+            STANDINGS_URL.format(year=season_year, group_id=group_id)
+        )
+    except Exception:
+        return
+    label = canonical_conference(
+        (conf_data.get("name") or conf_data.get("shortName") or "").strip()
+    )
+    for entry in standings_entries(conf_data):
+        team = entry.get("team") or {}
+        tid = str(team.get("id") or "").strip()
+        if tid and label:
+            out.setdefault(tid, label)
+    for child in conf_data.get("children") or []:
+        child_id = str(child.get("id") or "").strip()
+        if not child_id:
+            continue
+        time.sleep(sleep_s)
+        try:
+            child_data = fetch_json(
+                STANDINGS_URL.format(year=season_year, group_id=child_id)
+            )
+        except Exception:
+            continue
+        child_label = canonical_conference(
+            (child_data.get("name") or child.get("name") or label).strip()
+        )
+        for entry in standings_entries(child_data):
+            team = entry.get("team") or {}
+            tid = str(team.get("id") or "").strip()
+            if tid and child_label:
+                out.setdefault(tid, child_label)
+
+
+def fill_missing_from_team_pages(
+    season_year: int,
+    out: dict[str, str],
+    *,
+    sleep_s: float,
+) -> None:
+    for tid in fpi_team_ids(season_year):
+        if tid in out:
+            continue
+        time.sleep(sleep_s)
+        try:
+            data = fetch_json(TEAM_URL.format(tid=tid, year=season_year))
+        except Exception:
+            continue
+        team = data.get("team") or {}
+        conf = conference_from_standing(team.get("standingSummary") or "")
+        if conf:
+            out[tid] = conf
 
 
 def fetch_season_conferences(
@@ -88,45 +192,11 @@ def fetch_season_conferences(
         conf_id = str(conf_node.get("id") or "").strip()
         if not conf_id:
             continue
-        conf_label = canonical_conference(
-            (conf_node.get("name") or conf_node.get("shortName") or "").strip()
-        )
-        time.sleep(sleep_s)
-        try:
-            conf_data = fetch_json(
-                STANDINGS_URL.format(year=season_year, group_id=conf_id)
-            )
-        except Exception:
-            continue
-        sub_conf = canonical_conference(
-            (conf_data.get("name") or conf_node.get("name") or "").strip()
-        )
-        label = sub_conf or conf_label
-        for entry in standings_entries(conf_data):
-            team = entry.get("team") or {}
-            tid = str(team.get("id") or "").strip()
-            if tid and label:
-                out[tid] = label
-        # Nested divisions (e.g. some independents lists)
-        for child in conf_data.get("children") or []:
-            child_id = str(child.get("id") or "").strip()
-            if not child_id:
-                continue
-            time.sleep(sleep_s)
-            try:
-                child_data = fetch_json(
-                    STANDINGS_URL.format(year=season_year, group_id=child_id)
-                )
-            except Exception:
-                continue
-            child_label = canonical_conference(
-                (child_data.get("name") or child.get("name") or label).strip()
-            )
-            for entry in standings_entries(child_data):
-                team = entry.get("team") or {}
-                tid = str(team.get("id") or "").strip()
-                if tid and child_label:
-                    out[tid] = child_label
+        merge_standings_group(season_year, conf_id, out, sleep_s=sleep_s)
+    for group_id, start, end in SUPPLEMENTAL_GROUPS:
+        if start <= season_year <= end:
+            merge_standings_group(season_year, group_id, out, sleep_s=sleep_s)
+    fill_missing_from_team_pages(season_year, out, sleep_s=sleep_s)
     return out
 
 
