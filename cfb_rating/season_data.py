@@ -154,16 +154,16 @@ POSTSEASON_MONTH_START = "-12-14"
 
 
 def espn_game_matchup_key(row: dict) -> tuple[str, str, str, str, str]:
-    home = (row.get("home_team_id") or "").strip()
-    away = (row.get("away_team_id") or "").strip()
+    home = str(row.get("home_team_id") or "").strip()
+    away = str(row.get("away_team_id") or "").strip()
     team_a, team_b = sorted([home, away])
     date = (row.get("game_date_utc") or "")[:10]
     return (
         date,
         team_a,
         team_b,
-        (row.get("home_points") or "").strip(),
-        (row.get("away_points") or "").strip(),
+        str(row.get("home_points") or "").strip(),
+        str(row.get("away_points") or "").strip(),
     )
 
 

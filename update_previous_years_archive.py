@@ -12,6 +12,10 @@ from cfb_paths import REPO_ROOT
 
 PYTHON = sys.executable
 DEFAULT_SEASONS = [
+    2007,
+    2008,
+    2009,
+    2010,
     2011,
     2012,
     2013,
@@ -42,7 +46,7 @@ def main() -> int:
         type=int,
         nargs="+",
         default=DEFAULT_SEASONS,
-        help="Years to export (default: 2011-2019, 2021-2025)",
+        help="Years to export (default: 2007-2019, 2021-2025)",
     )
     parser.add_argument("--skip-bootstrap", action="store_true")
     parser.add_argument(
