@@ -216,7 +216,11 @@ def write_espn_games(path: Path, games: dict[str, dict]) -> int:
     ]
     rows = sorted(
         games.values(),
-        key=lambda r: (r.get("game_date_utc", ""), r.get("week", 0), r["game_id"]),
+        key=lambda r: (
+            r.get("game_date_utc", ""),
+            int(r.get("week") or 0),
+            r["game_id"],
+        ),
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
