@@ -156,11 +156,14 @@ The **Previous Years** tab serves committed JSON (`data/previous_years.json`) wi
 **One-time or refresh export (local machine, with `CFB_DATA_ROOT` data):**
 
 ```powershell
-# If you lack gitignored 2025 CSVs, bootstrap ESPN games + FPI preseason:
-python bootstrap_prior_season_data.py --season 2025
+# One shot for archive seasons (bootstrap missing years, then export each):
+python update_previous_years_archive.py --seasons 2021 2022 2023 2024 2025
 
-# Prefer your own Preseason_2025_blended.csv (Allen combined_FPI) over the ESPN FPI bootstrap.
-python export_previous_years.py --season 2025
+# Or per season:
+python bootstrap_prior_season_data.py --season 2024
+python export_previous_years.py --season 2024
+
+# Prefer your own Preseason_YYYY_blended.csv (Allen combined_FPI) over the ESPN FPI bootstrap.
 ```
 
 | File under `CFB_DATA_ROOT` | Role |
@@ -170,3 +173,5 @@ python export_previous_years.py --season 2025
 | `cfb_2025_fbs_margin_ratings.csv` | Optional: 2025 team names / conferences |
 
 Commit `data/previous_years.json` after export so Render picks up the tab without private CSVs.
+
+Bootstrap renumbers January bowl/playoff games (ESPN week `1`) to weeks after the regular season so cumulative records at each week stay chronological. Use the **last week** in the dropdown for full-season FBS records including the CFP/bowls.

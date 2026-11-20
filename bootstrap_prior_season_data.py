@@ -178,6 +178,29 @@ def attach_yards(games: dict[str, dict], sleep_s: float = 0.05) -> None:
         time.sleep(sleep_s)
 
 
+def renumber_postseason_weeks(games: dict[str, dict], season_year: int) -> int:
+    """ESPN labels Jan bowls/playoffs as week 1; assign sequential weeks after the regular season."""
+    jan_prefix = f"{season_year + 1}-01-"
+    season_start = f"{season_year}-07-01"
+    postseason: list[dict] = []
+    regular: list[dict] = []
+    for row in games.values():
+        date = (row.get("game_date_utc") or "")[:10]
+        if date.startswith(jan_prefix):
+            postseason.append(row)
+        elif date >= season_start:
+            regular.append(row)
+
+    reg_weeks = [
+        int(r.get("week") or 0) for r in regular if 0 < int(r.get("week") or 0) <= 20
+    ]
+    reg_max = max(reg_weeks) if reg_weeks else 0
+    postseason.sort(key=lambda r: (r.get("game_date_utc", ""), r["game_id"]))
+    for idx, row in enumerate(postseason):
+        row["week"] = reg_max + 1 + idx
+    return len(postseason)
+
+
 def write_espn_games(path: Path, games: dict[str, dict]) -> int:
     fieldnames = [
         "game_id",
@@ -249,7 +272,7 @@ def write_margin_ratings(
     rows: list[dict[str, str]] = []
     from cfb_rating.season_data import load_fbs_team_ids
 
-    teams_csv = root / "espn_cfb_teams_conferences.csv"
+    teams_csv = path.parent / "espn_cfb_teams_conferences.csv"
     espn_conf = {
         tid: meta.get("conference", "")
         for tid, meta in load_fbs_team_ids(teams_csv).items()
@@ -323,6 +346,9 @@ def main() -> int:
         if int(row.get("home_total_yards") or 0) > 0
         and int(row.get("away_total_yards") or 0) > 0
     }
+    n_post = renumber_postseason_weeks(kept, args.season)
+    if n_post:
+        print(f"  Renumbered {n_post} postseason games to weeks after {args.season} regular season")
     n_games = write_espn_games(games_path, kept)
     print(f"Wrote {n_games} games with yards to {games_path}")
     return 0
