@@ -174,4 +174,6 @@ python export_previous_years.py --season 2024
 
 Commit `data/previous_years.json` after export so Render picks up the tab without private CSVs.
 
-Bootstrap renumbers January bowl/playoff games (ESPN week `1`) to weeks after the regular season so cumulative records at each week stay chronological. Use the **last week** in the dropdown for full-season FBS records including the CFP/bowls.
+Bootstrap renumbers January bowl/playoff games (ESPN week `1`) to weeks after the regular season so cumulative records at each week stay chronological. Use the **last week** in the dropdown for full-season records including the CFP/bowls.
+
+Display **Record** on Previous Years counts **all games for that FBS team** (including FCS opponents). Overall and Resume rankings still use **FBS vs FBS** games only.
