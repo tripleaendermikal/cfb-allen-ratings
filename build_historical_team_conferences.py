@@ -136,7 +136,7 @@ def main() -> int:
         "--seasons",
         type=int,
         nargs="+",
-        default=[2019, 2021, 2022, 2023, 2024, 2025],
+        default=[2018, 2019, 2021, 2022, 2023, 2024, 2025],
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()

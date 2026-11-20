@@ -11,7 +11,7 @@ from pathlib import Path
 from cfb_paths import REPO_ROOT
 
 PYTHON = sys.executable
-DEFAULT_SEASONS = [2019, 2021, 2022, 2023, 2024, 2025]
+DEFAULT_SEASONS = [2018, 2019, 2021, 2022, 2023, 2024, 2025]
 
 
 def season_inputs_ready(season: int, data_root: Path) -> bool:
@@ -27,7 +27,7 @@ def main() -> int:
         type=int,
         nargs="+",
         default=DEFAULT_SEASONS,
-        help="Years to export (default: 2019, 2021-2025)",
+        help="Years to export (default: 2018-2019, 2021-2025)",
     )
     parser.add_argument("--skip-bootstrap", action="store_true")
     parser.add_argument(
