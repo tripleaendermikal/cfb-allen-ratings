@@ -157,7 +157,7 @@ The **Previous Years** tab serves committed JSON (`data/previous_years.json`) wi
 
 ```powershell
 # One shot for archive seasons (bootstrap missing years, then export each):
-python update_previous_years_archive.py --seasons 2021 2022 2023 2024 2025
+python update_previous_years_archive.py --seasons 2019 2021 2022 2023 2024 2025
 
 # Or per season:
 python bootstrap_prior_season_data.py --season 2024
