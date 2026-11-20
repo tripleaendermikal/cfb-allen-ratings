@@ -65,9 +65,12 @@ def records_for_week(
     games: Sequence[GameRecord],
     team_ids: Sequence[str],
     through_week: int,
-    max_week: int,
+    *,
+    record_cap_week: int | None = None,
 ) -> dict[str, dict[str, int]]:
-    week_games = filter_games_through_week(games, through_week, max_week=max_week)
+    """Cumulative FBS W-L through ``through_week`` (use full game list cap for playoffs)."""
+    cap = record_cap_week if record_cap_week is not None else through_week
+    week_games = filter_games_through_week(games, through_week, max_week=cap)
     out: dict[str, dict[str, int]] = {}
     for tid in team_ids:
         wins, gp = team_record_from_games(week_games, tid)
@@ -127,8 +130,12 @@ def build_season_export(
 
     by_week_json: dict[str, list[dict]] = {}
     weeks = sorted(by_week_rows.keys())
+    record_cap = max(
+        max_week,
+        max((g.week or 0) for g in games) if games else max_week,
+    )
     for week in weeks:
-        recs = records_for_week(games, team_ids, week, max_week)
+        recs = records_for_week(games, team_ids, week, record_cap_week=record_cap)
         entries = [row_to_json(r, recs.get(r.team_id, {})) for r in by_week_rows[week]]
         by_week_json[str(week)] = entries
 
