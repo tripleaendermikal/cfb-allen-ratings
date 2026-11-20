@@ -255,6 +255,7 @@ def write_margin_ratings(
     path: Path,
     fpi_map: dict[str, tuple[str, float]],
     conf_by_id: dict[str, tuple[str, str]],
+    season_year: int,
 ) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -267,6 +268,7 @@ def write_margin_ratings(
         "margin_rating",
     ]
     rows: list[dict[str, str]] = []
+    from cfb_historical_conferences import conference_for_season
     from cfb_rating.season_data import load_fbs_team_ids
 
     teams_csv = path.parent / "espn_cfb_teams_conferences.csv"
@@ -278,6 +280,7 @@ def write_margin_ratings(
         tname, conf = conf_by_id.get(tid, (name, ""))
         if not conf:
             conf = espn_conf.get(tid, "")
+        conf = conference_for_season(tid, conf, season_year)
         conf_norm = conf
         if conf in ("FBS Independents", "Independents"):
             conf_norm = "FBS Indep."
@@ -322,7 +325,7 @@ def main() -> int:
     games_path = root / f"cfb_{args.season}_espn_games.csv"
 
     n_pre = write_preseason_blended(pre_path, fpi_map)
-    n_margin = write_margin_ratings(margin_path, fpi_map, conf_by_id)
+    n_margin = write_margin_ratings(margin_path, fpi_map, conf_by_id, args.season)
     print(f"Wrote {n_pre} teams to {pre_path}")
     print(f"Wrote {n_margin} FBS rows to {margin_path}")
 
