@@ -114,8 +114,11 @@ def build_season_export(
     team_info: Mapping[str, dict],
     *,
     max_week: int,
+    record_games: Sequence[GameRecord] | None = None,
     iterations: int = 1000,
 ) -> dict:
+    """Rankings use ``games`` (FBS vs FBS); display records may use ``record_games`` (+ FCS)."""
+    rec_source = list(record_games) if record_games is not None else list(games)
     rows = compute_weekly_in_season_rankings(
         games,
         preseason_margins,
@@ -132,10 +135,10 @@ def build_season_export(
     weeks = sorted(by_week_rows.keys())
     record_cap = max(
         max_week,
-        max((g.week or 0) for g in games) if games else max_week,
+        max((g.week or 0) for g in rec_source) if rec_source else max_week,
     )
     for week in weeks:
-        recs = records_for_week(games, team_ids, week, record_cap_week=record_cap)
+        recs = records_for_week(rec_source, team_ids, week, record_cap_week=record_cap)
         entries = [row_to_json(r, recs.get(r.team_id, {})) for r in by_week_rows[week]]
         by_week_json[str(week)] = entries
 
@@ -204,7 +207,9 @@ def main() -> int:
         return 1
 
     margin_info = load_team_info_from_margin_ratings(margin_path)
-    games = load_espn_games(games_path, teams_path=teams_path)
+    all_games = load_espn_games(
+        games_path, fbs_only=False, teams_path=teams_path
+    )
 
     from cfb_rating.season_data import load_fbs_team_ids
 
@@ -223,26 +228,29 @@ def main() -> int:
         teams_path=teams_path,
     )
 
-    participants = {g.home_team_id for g in games} | {g.away_team_id for g in games}
-    fbs_ids = {
-        tid
-        for tid in participants
-        if tid in team_info and is_fbs_team(team_info[tid])
-    }
+    fbs_ids = {tid for tid in team_info if is_fbs_team(team_info[tid])}
     games = [
         g
-        for g in games
+        for g in all_games
         if g.home_team_id in fbs_ids and g.away_team_id in fbs_ids
+    ]
+    record_games = [
+        g
+        for g in all_games
+        if g.home_team_id in fbs_ids or g.away_team_id in fbs_ids
     ]
     team_ids = sorted(fbs_ids)
     preseason_full = dict(preseason_margins)
     for tid in team_ids:
         preseason_full.setdefault(tid, 0.0)
 
-    inferred = infer_max_week(games)
+    inferred = infer_max_week(games or record_games)
     max_week = args.max_week if args.max_week is not None else inferred
-    if games:
-        max_week = max(max_week, max((g.week or 0) for g in games))
+    week_pool = games or record_games
+    if week_pool:
+        max_week = max(max_week, max((g.week or 0) for g in week_pool))
+    if record_games:
+        max_week = max(max_week, max((g.week or 0) for g in record_games))
 
     season_payload = build_season_export(
         args.season,
@@ -251,6 +259,7 @@ def main() -> int:
         team_ids,
         team_info,
         max_week=max_week,
+        record_games=record_games,
         iterations=args.iterations,
     )
     season_payload["sources"] = {

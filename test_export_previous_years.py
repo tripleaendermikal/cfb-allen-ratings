@@ -10,6 +10,7 @@ from pathlib import Path
 
 from export_previous_years import (
     build_season_export,
+    records_for_week,
     write_previous_years_json,
 )
 from cfb_rating.in_season import load_preseason_margins
@@ -50,6 +51,24 @@ class TestExportPreviousYears(unittest.TestCase):
         self.assertTrue(week6)
         self.assertIn(overall_top, team_ids)
         self.assertIn(resume_top, team_ids)
+
+    def test_record_includes_fcs_games(self) -> None:
+        games_path = FIXTURES / "games.csv"
+        pre_path = FIXTURES / "preseason.csv"
+        teams_path = FIXTURES / "teams.csv"
+        all_games = load_espn_games(games_path, fbs_only=False, teams_path=teams_path)
+        fbs_games = [g for g in all_games if "999" not in (g.home_team_id, g.away_team_id)]
+        record_games = [
+            g
+            for g in all_games
+            if g.home_team_id in {"1", "2", "3", "4"} or g.away_team_id in {"1", "2", "3", "4"}
+        ]
+        preseason = load_preseason_margins(pre_path, teams_path=teams_path)
+        rec = records_for_week(record_games, ["1"], 6, record_cap_week=6)
+        self.assertEqual(rec["1"]["wins"], 3)
+        self.assertEqual(rec["1"]["fbs_games_played"], 3)
+        fbs_only = records_for_week(fbs_games, ["1"], 6, record_cap_week=6)
+        self.assertEqual(fbs_only["1"]["wins"], 2)
 
     def test_write_merges_seasons(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
