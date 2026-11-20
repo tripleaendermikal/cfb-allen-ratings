@@ -153,6 +153,33 @@ def load_fbs_team_ids(
 POSTSEASON_MONTH_START = "-12-14"
 
 
+def espn_game_matchup_key(row: dict) -> tuple[str, str, str, str, str]:
+    home = (row.get("home_team_id") or "").strip()
+    away = (row.get("away_team_id") or "").strip()
+    team_a, team_b = sorted([home, away])
+    date = (row.get("game_date_utc") or "")[:10]
+    return (
+        date,
+        team_a,
+        team_b,
+        (row.get("home_points") or "").strip(),
+        (row.get("away_points") or "").strip(),
+    )
+
+
+def dedupe_espn_game_rows(rows: list[dict]) -> list[dict]:
+    """Drop duplicate ESPN events (same date, teams, scores; different game_id)."""
+    seen: set[tuple[str, ...]] = set()
+    out: list[dict] = []
+    for row in rows:
+        key = espn_game_matchup_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
 def is_espn_postseason_row(row: dict, season_year: int) -> bool:
     """Bowls/CFP: January, or mid-December onward (after typical CCG weekend)."""
     date = (row.get("game_date_utc") or "")[:10]
@@ -240,41 +267,41 @@ def load_espn_games(
     games: List[GameRecord] = []
 
     with path.open(encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        rows = dedupe_espn_game_rows(list(csv.DictReader(handle)))
 
     if single_postseason_week and season_year is not None:
         normalize_espn_rows_single_postseason(rows, season_year)
 
     for row in rows:
-            home_team_id = row["home_team_id"].strip()
-            away_team_id = row["away_team_id"].strip()
+        home_team_id = row["home_team_id"].strip()
+        away_team_id = row["away_team_id"].strip()
 
-            if fbs_teams is not None:
-                if home_team_id not in fbs_teams or away_team_id not in fbs_teams:
-                    continue
-
-            home_yards = float(row["home_total_yards"])
-            away_yards = float(row["away_total_yards"])
-            if home_yards <= 0 or away_yards <= 0:
+        if fbs_teams is not None:
+            if home_team_id not in fbs_teams or away_team_id not in fbs_teams:
                 continue
 
-            week_raw = (row.get("week") or "").strip()
-            season_raw = (row.get("season") or "").strip()
-            neutral_raw = (row.get("neutral_site") or "").strip().lower()
-            games.append(
-                GameRecord(
-                    home_team_id=home_team_id,
-                    away_team_id=away_team_id,
-                    home_score=float(row["home_points"]),
-                    away_score=float(row["away_points"]),
-                    home_yards=home_yards,
-                    away_yards=away_yards,
-                    game_id=row.get("game_id") or None,
-                    week=int(week_raw) if week_raw else None,
-                    season=int(season_raw) if season_raw else None,
-                    neutral_site=neutral_raw in ("true", "1", "yes"),
-                )
+        home_yards = float(row["home_total_yards"])
+        away_yards = float(row["away_total_yards"])
+        if home_yards <= 0 or away_yards <= 0:
+            continue
+
+        week_raw = (row.get("week") or "").strip()
+        season_raw = (row.get("season") or "").strip()
+        neutral_raw = (row.get("neutral_site") or "").strip().lower()
+        games.append(
+            GameRecord(
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+                home_score=float(row["home_points"]),
+                away_score=float(row["away_points"]),
+                home_yards=home_yards,
+                away_yards=away_yards,
+                game_id=row.get("game_id") or None,
+                week=int(week_raw) if week_raw else None,
+                season=int(season_raw) if season_raw else None,
+                neutral_site=neutral_raw in ("true", "1", "yes"),
             )
+        )
 
     return games
 

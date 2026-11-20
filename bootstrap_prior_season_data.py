@@ -106,7 +106,10 @@ def iter_season_dates(season_year: int):
 
 
 def collect_games(season_year: int, sleep_s: float = 0.08) -> dict[str, dict]:
+    from cfb_rating.season_data import espn_game_matchup_key
+
     by_id: dict[str, dict] = {}
+    seen_matchups: set[tuple[str, ...]] = set()
     for day in iter_season_dates(season_year):
         ds = day.strftime("%Y%m%d")
         url = f"{SCOREBOARD_URL}?dates={ds}&groups=80&limit=400"
@@ -147,7 +150,7 @@ def collect_games(season_year: int, sleep_s: float = 0.08) -> dict[str, dict]:
             if not status.get("completed"):
                 continue
             week_obj = ev.get("week") or {}
-            by_id[gid] = {
+            row = {
                 "game_id": gid,
                 "season": season_year,
                 "week": int(week_obj.get("number") or 0),
@@ -160,6 +163,11 @@ def collect_games(season_year: int, sleep_s: float = 0.08) -> dict[str, dict]:
                 "away_team": away["name"],
                 "away_points": int(away["score"]),
             }
+            matchup_key = espn_game_matchup_key(row)
+            if matchup_key in seen_matchups:
+                continue
+            seen_matchups.add(matchup_key)
+            by_id[gid] = row
         time.sleep(sleep_s)
     return by_id
 
