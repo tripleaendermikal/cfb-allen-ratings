@@ -12,6 +12,30 @@ from cfb_paths import REPO_ROOT
 
 HISTORICAL_JSON = REPO_ROOT / "data" / "historical_team_conferences.json"
 
+# Defunct FBS leagues still shown on Previous Years (not in current teams CSV).
+HISTORICAL_FBS_EXTRA = frozenset({"WAC", "Big East"})
+
+FCS_CONFERENCE_LABELS = frozenset(
+    {
+        "Big Sky",
+        "CAA",
+        "FCS Indep.",
+        "Ivy",
+        "MEAC",
+        "MVFC",
+        "Missouri Valley",
+        "NEC",
+        "OVC",
+        "OVC-Big South",
+        "Patriot",
+        "Pioneer",
+        "Southern",
+        "Southland",
+        "SWAC",
+        "UAC",
+    }
+)
+
 
 @lru_cache(maxsize=1)
 def _load_historical() -> dict[str, dict[str, str]]:
@@ -26,6 +50,24 @@ def _load_historical() -> dict[str, dict[str, str]]:
         if isinstance(mapping, dict):
             out[str(year)] = {str(k): str(v) for k, v in mapping.items()}
     return out
+
+
+def is_fbs_conference_label(conf: str) -> bool:
+    """True for a conference label that denotes FBS membership that season."""
+    label = (conf or "").strip()
+    if not label or label == "Unknown":
+        return False
+    if label in FCS_CONFERENCE_LABELS:
+        return False
+    from cfb_rating.season_data import FBS_CONFERENCES
+
+    return label in FBS_CONFERENCES or label in HISTORICAL_FBS_EXTRA
+
+
+def fbs_team_ids_for_season(season_year: int) -> set[str]:
+    """ESPN FBS membership for a season (from ``historical_team_conferences.json``)."""
+    hist = _load_historical().get(str(season_year), {})
+    return {tid for tid, conf in hist.items() if is_fbs_conference_label(conf)}
 
 
 def conference_for_season(
@@ -46,15 +88,22 @@ def conference_for_season(
 def apply_season_conferences_to_team_info(
     team_info: Mapping[str, dict],
     season_year: int,
+    *,
+    team_ids: set[str] | None = None,
 ) -> dict[str, dict]:
     """Return a copy of team_info with conferences set for that season."""
+    allowed = team_ids if team_ids is not None else set(team_info)
     updated: dict[str, dict] = {}
-    for tid, meta in team_info.items():
+    for tid in allowed:
+        meta = team_info.get(tid)
+        if not meta:
+            continue
         row = dict(meta)
         row["conference"] = conference_for_season(
             tid,
             row.get("conference", ""),
             season_year,
         )
-        updated[tid] = row
+        if is_fbs_conference_label(row["conference"]):
+            updated[tid] = row
     return updated

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 import cfb_historical_conferences as hist
+from cfb_historical_conferences import fbs_team_ids_for_season
 
 
 class TestHistoricalConferences(unittest.TestCase):
@@ -37,6 +38,31 @@ class TestHistoricalConferences(unittest.TestCase):
                     hist.conference_for_season("201", "Big 12", 2024),
                     "SEC",
                 )
+                hist._load_historical.cache_clear()
+
+
+    def test_fbs_team_ids_for_season(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "historical_team_conferences.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "seasons": {
+                            "2007": {
+                                "68": "WAC",
+                                "9999": "Big Sky",
+                            },
+                            "2025": {"68": "Mountain West", "1": "SEC"},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(hist, "HISTORICAL_JSON", path):
+                hist._load_historical.cache_clear()
+                ids = fbs_team_ids_for_season(2007)
+                self.assertEqual(ids, {"68"})
+                self.assertEqual(len(fbs_team_ids_for_season(2025)), 2)
                 hist._load_historical.cache_clear()
 
 
