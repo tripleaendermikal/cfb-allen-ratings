@@ -178,4 +178,6 @@ Bootstrap groups everything after conference championship weekend (December bowl
 
 Display **Record** on Previous Years counts **all games for that FBS team** (including FCS opponents). Overall and Resume rankings still use **FBS vs FBS** games only.
 
+Each season’s team list is **only schools in FBS that year** (`historical_team_conferences.json`), not the current 138-team map.
+
 Conference badges use `data/historical_team_conferences.json` (ESPN standings by season, plus supplemental groups such as WAC for 2007–2012 and team-page fallback), not current `espn_cfb_teams_conferences.csv`. Regenerate with `python build_historical_team_conferences.py` and re-export prior seasons when memberships change.

@@ -11,7 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from cfb_historical_conferences import apply_season_conferences_to_team_info
+from cfb_historical_conferences import (
+    apply_season_conferences_to_team_info,
+    conference_for_season,
+    fbs_team_ids_for_season,
+    is_fbs_conference_label,
+)
 from cfb_paths import REPO_ROOT, data_root
 from cfb_rating.in_season import (
     InSeasonRankingRow,
@@ -240,7 +245,36 @@ def main() -> int:
 
     from cfb_rating.season_data import load_fbs_team_ids
 
-    team_info = load_fbs_team_ids(teams_path)
+    season_fbs_ids = fbs_team_ids_for_season(args.season)
+    all_team_info = load_fbs_team_ids(teams_path)
+    if not season_fbs_ids:
+        season_fbs_ids = set(all_team_info.keys())
+    team_info = {
+        tid: dict(all_team_info[tid])
+        for tid in season_fbs_ids
+        if tid in all_team_info
+    }
+    game_names: dict[str, str] = {}
+    for row in espn_rows:
+        for side in ("home", "away"):
+            tid = (row.get(f"{side}_team_id") or "").strip()
+            name = (row.get(f"{side}_team") or "").strip()
+            if tid and name:
+                game_names.setdefault(tid, name)
+
+    for tid in season_fbs_ids:
+        if tid in team_info:
+            continue
+        conf = conference_for_season(tid, "", args.season)
+        if not is_fbs_conference_label(conf):
+            continue
+        name = (margin_info.get(tid) or {}).get("team_name") or game_names.get(tid) or ""
+        team_info[tid] = {
+            "team_id": tid,
+            "team_name": name,
+            "conference": conf,
+        }
+
     for tid, meta in margin_info.items():
         if tid not in team_info:
             continue
@@ -250,14 +284,16 @@ def main() -> int:
         if conf and is_fbs_team({"conference": conf}):
             team_info[tid] = {**team_info[tid], "conference": conf}
 
-    team_info = apply_season_conferences_to_team_info(team_info, args.season)
+    team_info = apply_season_conferences_to_team_info(
+        team_info, args.season, team_ids=season_fbs_ids
+    )
 
     preseason_margins = load_preseason_margins(
         preseason_path,
         teams_path=teams_path,
     )
 
-    fbs_ids = {tid for tid in team_info if is_fbs_team(team_info[tid])}
+    fbs_ids = set(team_info.keys())
     games = [
         g
         for g in all_games
