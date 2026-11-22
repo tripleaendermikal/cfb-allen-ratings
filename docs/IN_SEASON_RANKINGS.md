@@ -24,11 +24,13 @@ and ranks will disagree across the site.
 
 `update_in_season_weekly.py` runs:
 
-1. **Refresh scores** — `refresh_2026_schedule_scores.py` (updates `cfb_2026_fbs_games_with_fpi.csv` in place; preserves sim columns; fetches real yards)
-2. **Weekly rankings** — `compute_in_season_rankings.py` (Overall margins seed sim FPI draws)
-3. **In-season sims** — `run_in_season_sim_pipeline.py --skip-refresh` (1k seasons; pins completed games)
-4. **Validate** — `validate_in_season_sim_overall.py` (sim FPI μ matches Overall)
-5. **Export** — `export_in_season_data.py` → `data/*.json` for Render
+1. **Rebuild schedule** — `build_cfb_fpi_games.py` (ESPN scoreboards; picks up newly scheduled games such as Pac-12 Week 13)
+2. **Preseason FPI on schedule** — `apply_preseason_fpi.py`
+3. **Refresh scores** — `refresh_2026_schedule_scores.py` (scores/yards on the schedule CSV; fetches real yards)
+4. **Weekly rankings** — `compute_in_season_rankings.py` (Overall margins seed sim FPI draws)
+5. **In-season sims** — `run_in_season_sim_pipeline.py --skip-refresh` (1k seasons; pins completed games)
+6. **Validate** — `validate_in_season_sim_overall.py` (sim FPI μ matches Overall)
+7. **Export** — `export_in_season_data.py` → `data/*.json` for Render
 
 ## Data layout
 
@@ -135,6 +137,7 @@ Render auto-redeploys from committed `data/` JSON.
 | Script | Role |
 |--------|------|
 | `update_in_season_weekly.py` | Orchestrator |
+| `build_cfb_fpi_games.py` | Rebuild 2026 FBS schedule from ESPN |
 | `refresh_2026_schedule_scores.py` | ESPN scores + yards |
 | `compute_in_season_rankings.py` | Weekly rankings |
 | `run_in_season_sim_pipeline.py` | Monte Carlo sim stack |
