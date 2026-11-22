@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-refresh",
         action="store_true",
-        help="Skip ESPN score refresh",
+        help="Skip ESPN schedule rebuild, preseason FPI apply, and score refresh",
     )
     parser.add_argument(
         "--skip-sims",
@@ -54,6 +54,14 @@ def main() -> int:
     args = build_parser().parse_args()
 
     if not args.skip_refresh:
+        run_step(
+            "Rebuild FBS schedule from ESPN",
+            [PYTHON, str(REPO_ROOT / "build_cfb_fpi_games.py")],
+        )
+        run_step(
+            "Apply preseason combined_FPI to schedule",
+            [PYTHON, str(REPO_ROOT / "apply_preseason_fpi.py")],
+        )
         run_step(
             "Refresh ESPN scores",
             [PYTHON, str(REPO_ROOT / "refresh_2026_schedule_scores.py")],

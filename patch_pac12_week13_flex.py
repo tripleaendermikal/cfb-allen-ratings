@@ -57,6 +57,25 @@ def has_flex_row(rows: list[dict[str, str]], team_id: str) -> bool:
     return False
 
 
+def has_real_week13_matchup(rows: list[dict[str, str]], team_id: str) -> bool:
+    """True when ESPN (or schedule) has a concrete Week 13 opponent for this team."""
+    for row in rows:
+        if (row.get("team_id") or "").strip() != team_id:
+            continue
+        if (row.get("week") or "").strip() != WEEK:
+            continue
+        if is_flex_row(row):
+            continue
+        oid = (row.get("opponent_id") or "").strip()
+        oname = (row.get("opponent_name") or "").strip()
+        if oid in (TBD_ID, "-1", PAC12_FLEX_OPPONENT_ID):
+            continue
+        if not oid or oname.upper() == "TBD":
+            continue
+        return True
+    return False
+
+
 def should_remove_row(row: dict[str, str]) -> bool:
     gid = (row.get("game_id") or "").strip()
     if gid in LEGACY_TBD_PATCH_GAME_IDS:
@@ -135,9 +154,36 @@ def main() -> int:
     removed = sum(1 for row in rows if should_remove_row(row))
     rows = [row for row in rows if not should_remove_row(row)]
 
+    real_week13 = {
+        tid for tid in PAC12_TEAM_IDS if has_real_week13_matchup(rows, tid)
+    }
+    if real_week13:
+        before = len(rows)
+        rows = [
+            row
+            for row in rows
+            if not (
+                is_flex_row(row)
+                and (row.get("team_id") or "").strip() in real_week13
+            )
+            and not (
+                (row.get("team_id") or "").strip() == PAC12_FLEX_OPPONENT_ID
+                and (row.get("opponent_id") or "").strip() in real_week13
+            )
+        ]
+        flex_dropped = before - len(rows)
+        if flex_dropped:
+            print(
+                f"Removed {flex_dropped} flex row(s); ESPN Week {WEEK} matchups for "
+                f"{len(real_week13)} Pac-12 team(s)"
+            )
+
     added = 0
     game_id_num = FLEX_GAME_ID_START
     for team_id in list(PAC12_HOME_IDS) + list(PAC12_AWAY_IDS):
+        if has_real_week13_matchup(rows, team_id):
+            print(f"Skip team_id {team_id}: ESPN Week {WEEK} matchup present")
+            continue
         if has_flex_row(rows, team_id):
             print(f"Skip team_id {team_id}: flex Week {WEEK} row already present")
             continue
