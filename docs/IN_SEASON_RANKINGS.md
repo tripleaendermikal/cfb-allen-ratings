@@ -98,6 +98,10 @@ Leaderboard mode `mode=forecast_resume`. For each traditional sim (`sim_0001`–
 - Added to the weekly rankings CSV by `augment_weekly_rankings_forecast_resume.py` after sims (see `update_in_season_weekly.py`).
 - `export_in_season_data.py` also recomputes when building `rankings.json`.
 
+## Conference championship (week 14 schedule)
+
+When ESPN lists a **week 14 same-conference** game with **both teams known**, that row is the conference championship: the sim outcome on the schedule is the title game, standings exclude that game when seeding finalists, and the pipeline does **not** add a second synthetic CCG win or an extra games-played credit. If only one side is known (opponent TBD), the known team is pinned as a finalist, the placeholder schedule row is not simulated or counted toward wins, and a single synthetic CCG is applied. Logic lives in [`cfb_conf_championship.py`](cfb_conf_championship.py) and [`team_simulation_records.py`](team_simulation_records.py).
+
 ## Resume playoff simulations (sims 1001–2000)
 
 Each Monte Carlo game sim (`sim_0001`–`sim_1000`) also has a **paired resume-playoff** sim (`sim_1001`–`sim_2000`) with the same game outcomes but:

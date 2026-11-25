@@ -416,12 +416,22 @@ def main() -> int:
     conf_results = compute_conf_results_by_sim(
         SOURCES["games_sim"], SOURCES["games_fpi"], SOURCES["conferences"]
     )
+    from cfb_conf_championship import load_scheduled_ccg_by_conference
+
+    scheduled_ccg = load_scheduled_ccg_by_conference(
+        SOURCES["games_fpi"], conf_by_id
+    )
     if SOURCES["games_base"].is_file():
         projected_wins_by_team, projected_games_by_team = projected_season_stats_from_sims(
             records_rows,
             game_sim_cols,
             game_rows,
             conf_finalists_by_sim=conf_results["finalists"],
+            conf_by_id=conf_by_id,
+            skip_confs_with_scheduled_ccg=conf_results.get(
+                "scheduled_ccg_resolved_confs", frozenset()
+            ),
+            scheduled_ccg=scheduled_ccg,
         )
         _ = projected_wins_by_team, projected_games_by_team
     h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
@@ -442,6 +452,11 @@ def main() -> int:
         h2h_games_by_col,
         game_rows,
         conf_results["finalists"],
+        conf_by_id=conf_by_id,
+        skip_confs_with_scheduled_ccg=conf_results.get(
+            "scheduled_ccg_resolved_confs", frozenset()
+        ),
+        scheduled_ccg=scheduled_ccg,
     )
     conference_deep = esd.build_conference_deep(
         conferences,

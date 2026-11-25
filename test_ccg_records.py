@@ -26,6 +26,17 @@ class TestCcgRecords(unittest.TestCase):
         self.assertEqual(wins["10"]["sim_0001"], 12)
         self.assertEqual(wins.get("20", {}).get("sim_0001", 11), 11)
 
+    def test_apply_ccg_skip_resolved_schedule(self):
+        wins = {"10": {"sim_0001": 12}}
+        apply_ccg_win_deltas_to_wins(
+            wins,
+            {"sim_0001": {"SEC": "10"}},
+            {"sim_0001": {"SEC": ["10", "20"]}},
+            ["sim_0001"],
+            skip_confs_with_scheduled_ccg=frozenset({"SEC"}),
+        )
+        self.assertEqual(wins["10"]["sim_0001"], 12)
+
     def test_build_sim_records_includes_ccg_loss(self):
         records_rows = [
             {"team_id": "1", "sim_0001": "13"},

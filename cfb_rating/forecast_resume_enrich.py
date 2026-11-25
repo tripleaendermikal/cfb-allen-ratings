@@ -7,7 +7,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from cfb_conf_championship import ccg_participants_by_col
+from cfb_conf_championship import (
+    ScheduledCcg,
+    ccg_participants_by_col,
+    is_partial_scheduled_ccg_row,
+)
 from cfb_rating.resume import compute_resume_margins
 from cfb_rating.season_data import load_fbs_team_ids
 from cfb_rating.sim_resume import build_sim_season_games
@@ -31,12 +35,18 @@ def projected_games_from_sim_games(
     sim_cols: Sequence[str],
     *,
     conf_finalists_by_sim: Mapping[str, Mapping[str, list[str]]] | None = None,
+    conf_by_id: Mapping[str, str] | None = None,
+    skip_confs_with_scheduled_ccg: frozenset[str] = frozenset(),
+    scheduled_ccg: Mapping[str, ScheduledCcg] | None = None,
 ) -> dict[str, float]:
     """Mean games played per sim (schedule results + CCG when applicable)."""
     games_played: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    sched = dict(scheduled_ccg or {})
     for row in game_rows:
         team_id = (row.get("team_id") or "").strip()
         if not team_id:
+            continue
+        if is_partial_scheduled_ccg_row(row, sched):
             continue
         for col in sim_cols:
             result = (row.get(col) or "").strip()
@@ -59,7 +69,9 @@ def projected_games_from_sim_games(
         for col in sim_cols:
             gp = games_played[team_id].get(col, 0)
             if team_id in ccg_played.get(col, set()):
-                gp += 1
+                conf = (conf_by_id or {}).get(team_id, "")
+                if conf not in skip_confs_with_scheduled_ccg:
+                    gp += 1
             totals.append(gp)
         out[team_id] = sum(totals) / len(totals) if totals else 0.0
     return out
@@ -71,10 +83,18 @@ def projected_season_stats_from_sims(
     game_rows: Sequence[Mapping[str, str]],
     *,
     conf_finalists_by_sim: Mapping[str, Mapping[str, list[str]]] | None = None,
+    conf_by_id: Mapping[str, str] | None = None,
+    skip_confs_with_scheduled_ccg: frozenset[str] = frozenset(),
+    scheduled_ccg: Mapping[str, ScheduledCcg] | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     wins = projected_wins_from_sim_records(records_rows, sim_cols)
     games = projected_games_from_sim_games(
-        game_rows, sim_cols, conf_finalists_by_sim=conf_finalists_by_sim
+        game_rows,
+        sim_cols,
+        conf_finalists_by_sim=conf_finalists_by_sim,
+        conf_by_id=conf_by_id,
+        skip_confs_with_scheduled_ccg=skip_confs_with_scheduled_ccg,
+        scheduled_ccg=scheduled_ccg,
     )
     return wins, games
 
