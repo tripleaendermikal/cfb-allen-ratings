@@ -704,6 +704,24 @@ table.data-table.compact-table { font-size: 0.85rem; }
   opacity: 0.9;
 }
 
+.team-page .schedule-table .schedule-opponent-rank {
+  display: inline-block;
+  min-width: 2.25rem;
+  margin-right: 0.35rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.team-page .schedule-table .badge-ccg {
+  margin-left: 0.35rem;
+  font-size: 0.65rem;
+  background: linear-gradient(135deg, #b8860b, #d4a017);
+  color: #1a1200;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .team-page .stat-value {
   color: color-mix(in srgb, var(--team-primary) 70%, var(--text));
 }

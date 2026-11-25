@@ -213,6 +213,7 @@ def simulate_from_margins(
     *,
     pin_completed: bool = False,
     main_seed: int | None = None,
+    skip_sim_game_ids: frozenset[str] = frozenset(),
 ) -> list[dict[str, str]]:
     flex_rows_by_team: dict[str, dict[str, str]] = {}
     regular_rows: list[dict[str, str]] = []
@@ -236,6 +237,8 @@ def simulate_from_margins(
             win_by_team[(game_id, s["team_id"])] = {wc: "" for wc in win_cols}
 
         if len(sides) != 2:
+            continue
+        if game_id in skip_sim_game_ids:
             continue
 
         home = next((s for s in sides if s.get("home_away") == "home"), sides[0])
@@ -305,6 +308,8 @@ def simulate_from_variable_fpi(
     rng: random.Random,
     n_sims: int,
     fpi_sigma: float,
+    *,
+    skip_sim_game_ids: frozenset[str] = frozenset(),
 ) -> list[dict[str, str]]:
     by_game: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in rows:
@@ -328,6 +333,8 @@ def simulate_from_variable_fpi(
 
         for game_id, sides in game_list:
             if len(sides) != 2:
+                continue
+            if game_id in skip_sim_game_ids:
                 continue
 
             home = next((s for s in sides if s.get("home_away") == "home"), None)
@@ -434,6 +441,20 @@ def main() -> int:
     margin_cols = find_margin_columns(fieldnames)
     rng = random.Random(args.seed)
 
+    script_dir = Path(__file__).resolve().parent
+    conf_path = script_dir / "espn_cfb_teams_conferences.csv"
+    skip_sim_game_ids: frozenset[str] = frozenset()
+    if conf_path.is_file():
+        from cfb_conf_championship import (
+            load_conference_lookup,
+            load_scheduled_ccg_by_conference,
+            partial_scheduled_ccg_game_ids,
+        )
+
+        conf_by_id, _, _ = load_conference_lookup(conf_path)
+        scheduled = load_scheduled_ccg_by_conference(inp, conf_by_id)
+        skip_sim_game_ids = partial_scheduled_ccg_game_ids(scheduled)
+
     if margin_cols and not args.legacy_fpi:
         if args.simulations is not None:
             margin_cols = margin_cols[: args.simulations]
@@ -443,6 +464,7 @@ def main() -> int:
             margin_cols,
             pin_completed=args.pin_completed,
             main_seed=args.seed,
+            skip_sim_game_ids=skip_sim_game_ids,
         )
         win_cols = [margin_to_win_col(mc) for mc in margin_cols]
         base_fields = [c for c in fieldnames if not c.startswith(("sim_", "margin_"))]
@@ -458,7 +480,13 @@ def main() -> int:
         if args.fpi_sigma <= 0:
             print("--fpi-sigma must be positive", file=sys.stderr)
             return 1
-        simulated = simulate_from_variable_fpi(rows, rng, n_sims, args.fpi_sigma)
+        simulated = simulate_from_variable_fpi(
+            rows,
+            rng,
+            n_sims,
+            args.fpi_sigma,
+            skip_sim_game_ids=skip_sim_game_ids,
+        )
         win_cols = sim_column_names(n_sims)
         base_fields = [c for c in fieldnames if not c.startswith(("sim_", "margin_"))]
         out_fields = base_fields + win_cols

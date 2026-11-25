@@ -1412,6 +1412,8 @@ def build_games(
     schedule: list[dict],
     conf_by_id: dict[str, str],
     margin_lists: dict[tuple[str, str], list[float]],
+    *,
+    conference_championship_game_ids: frozenset[str] = frozenset(),
 ) -> dict[str, dict]:
     """Per-game detail records keyed by game_id (home-team perspective)."""
     by_id: dict[str, dict] = {}
@@ -1483,6 +1485,7 @@ def build_games(
             "home_win_pct": home_wp,
             "avg_margin": avg_margin,
             "is_conference_game": is_conf,
+            "is_conference_championship": gid in conference_championship_game_ids,
             "is_pac12_flex": is_flex,
             "margin_histogram": build_margin_histogram(adjusted_home_margins),
         }
@@ -1536,14 +1539,23 @@ def build_sim_records_by_team_col(
     game_rows: list[dict],
     conf_champions_by_sim: dict[str, dict[str, str]] | None = None,
     conf_finalists_by_sim: dict[str, dict[str, list[str]]] | None = None,
+    *,
+    conf_by_id: dict[str, str] | None = None,
+    skip_confs_with_scheduled_ccg: frozenset[str] = frozenset(),
+    scheduled_ccg: dict | None = None,
 ) -> dict[str, dict[str, tuple[int, int]]]:
     """Per team_id and sim column: (wins, losses) from sim results including CCG."""
     from collections import defaultdict
 
+    from cfb_conf_championship import is_partial_scheduled_ccg_row
+
     games_played: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    sched = scheduled_ccg or {}
     for row in game_rows:
         tid = (row.get("team_id") or "").strip()
         if not tid:
+            continue
+        if is_partial_scheduled_ccg_row(row, sched):
             continue
         for col in sim_cols:
             v = (row.get(col) or "").strip()
@@ -1566,7 +1578,9 @@ def build_sim_records_by_team_col(
             wins = int((row.get(col) or "0").strip() or 0)
             gp = games_played[tid].get(col, 0)
             if tid in ccg_played.get(col, set()):
-                gp += 1
+                conf = (conf_by_id or {}).get(tid, "")
+                if conf not in skip_confs_with_scheduled_ccg:
+                    gp += 1
             losses = max(gp - wins, 0) if gp else 0
             by_team[tid][col] = (wins, losses)
     return by_team
@@ -1590,6 +1604,9 @@ def build_brackets(
     h2h_games_by_col,
     game_rows: list[dict] | None = None,
     conf_finalists_by_sim: dict[str, dict[str, list[str]]] | None = None,
+    conf_by_id: dict[str, str] | None = None,
+    skip_confs_with_scheduled_ccg: frozenset[str] = frozenset(),
+    scheduled_ccg: dict | None = None,
 ) -> dict:
     """Per-sim playoff seeds/brackets and team-centric summary."""
     sim_fpi_by_col = load_sim_fpi_by_team(SOURCES["games_fpi"])
@@ -1615,6 +1632,9 @@ def build_brackets(
             game_rows or [],
             conf_champions_by_sim,
             conf_finalists_by_sim,
+            conf_by_id=conf_by_id,
+            skip_confs_with_scheduled_ccg=skip_confs_with_scheduled_ccg,
+            scheduled_ccg=scheduled_ccg,
         )
         if game_rows
         else {}
@@ -1831,7 +1851,21 @@ def main() -> int:
     full_schedule, schedule = build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
     merge_team_sos(teams, leaderboard, build_team_sos(full_schedule))
     conferences = build_conferences(teams, leaderboard, eligibility["fields"], n_sims)
-    games = build_games(schedule, conf_by_id, margin_lists)
+    from cfb_conf_championship import (
+        load_scheduled_ccg_by_conference,
+        scheduled_ccg_game_ids,
+    )
+
+    scheduled_ccg = load_scheduled_ccg_by_conference(
+        SOURCES["games_fpi"], conf_by_id
+    )
+    ccg_game_ids = scheduled_ccg_game_ids(scheduled_ccg)
+    games = build_games(
+        schedule,
+        conf_by_id,
+        margin_lists,
+        conference_championship_game_ids=ccg_game_ids,
+    )
     game_slugs = build_game_slugs(games)
     conf_championship = build_conf_championship(sim_cols, id_to_name)
     conf_results = compute_conf_results_by_sim(
@@ -1853,6 +1887,11 @@ def main() -> int:
         h2h_games_by_col,
         game_rows,
         conf_results["finalists"],
+        conf_by_id=conf_by_id,
+        skip_confs_with_scheduled_ccg=conf_results.get(
+            "scheduled_ccg_resolved_confs", frozenset()
+        ),
+        scheduled_ccg=scheduled_ccg,
     )
     conference_deep = build_conference_deep(
         conferences,

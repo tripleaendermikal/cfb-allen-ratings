@@ -111,28 +111,47 @@ def main() -> int:
         wins: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         team_name: dict[str, str] = {}
 
+        conf_path = args.conferences
+        if conf_path is None:
+            conf_path = script_dir / "espn_cfb_teams_conferences.csv"
+        fpi_path = infer_games_fpi_path(inp)
+        from cfb_conf_championship import (
+            is_partial_scheduled_ccg_row,
+            load_conference_lookup,
+            load_scheduled_ccg_by_conference,
+        )
+
+        scheduled_ccg: dict = {}
+        if conf_path.is_file() and fpi_path.is_file():
+            conf_by_id, _, _ = load_conference_lookup(conf_path)
+            scheduled_ccg = load_scheduled_ccg_by_conference(fpi_path, conf_by_id)
+
         for row in reader:
             tid = (row.get("team_id") or "").strip()
             if not tid:
                 continue
             if tid not in team_name and row.get("team_name"):
                 team_name[tid] = row["team_name"]
+            if is_partial_scheduled_ccg_row(row, scheduled_ccg):
+                continue
 
             for sc in sim_cols:
                 v = (row.get(sc) or "").strip()
                 if v == "1":
                     wins[tid][sc] += 1
 
-    conf_path = args.conferences
-    if conf_path is None:
-        conf_path = script_dir / "espn_cfb_teams_conferences.csv"
-    fpi_path = infer_games_fpi_path(inp)
     if conf_path.is_file() and fpi_path.is_file():
         from cfb_conf_championship import apply_ccg_win_deltas_to_wins, compute_conf_results_by_sim
 
         results = compute_conf_results_by_sim(inp, fpi_path, conf_path)
         apply_ccg_win_deltas_to_wins(
-            wins, results["champions"], results["finalists"], sim_cols
+            wins,
+            results["champions"],
+            results["finalists"],
+            sim_cols,
+            skip_confs_with_scheduled_ccg=results.get(
+                "scheduled_ccg_resolved_confs", frozenset()
+            ),
         )
 
     for tid in list(wins.keys()):

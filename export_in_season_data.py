@@ -409,7 +409,17 @@ def main() -> int:
     esd.merge_team_sos(teams, leaderboard, esd.build_team_sos(full_schedule))
     trad_fields = all_fields[:trad_sim_count]
     conferences = esd.build_conferences(teams, leaderboard, trad_fields, trad_sim_count)
-    games = esd.build_games(schedule, conf_by_id, margin_lists)
+    from cfb_conf_championship import load_scheduled_ccg_by_conference, scheduled_ccg_game_ids
+
+    scheduled_ccg = load_scheduled_ccg_by_conference(
+        SOURCES["games_fpi"], conf_by_id
+    )
+    games = esd.build_games(
+        schedule,
+        conf_by_id,
+        margin_lists,
+        conference_championship_game_ids=scheduled_ccg_game_ids(scheduled_ccg),
+    )
     enrich_games_scores(games, schedule)
     game_slugs = esd.build_game_slugs(games)
     conf_championship = esd.build_conf_championship(game_sim_cols, id_to_name)
@@ -422,6 +432,11 @@ def main() -> int:
             game_sim_cols,
             game_rows,
             conf_finalists_by_sim=conf_results["finalists"],
+            conf_by_id=conf_by_id,
+            skip_confs_with_scheduled_ccg=conf_results.get(
+                "scheduled_ccg_resolved_confs", frozenset()
+            ),
+            scheduled_ccg=scheduled_ccg,
         )
         _ = projected_wins_by_team, projected_games_by_team
     h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(
@@ -442,6 +457,11 @@ def main() -> int:
         h2h_games_by_col,
         game_rows,
         conf_results["finalists"],
+        conf_by_id=conf_by_id,
+        skip_confs_with_scheduled_ccg=conf_results.get(
+            "scheduled_ccg_resolved_confs", frozenset()
+        ),
+        scheduled_ccg=scheduled_ccg,
     )
     conference_deep = esd.build_conference_deep(
         conferences,
