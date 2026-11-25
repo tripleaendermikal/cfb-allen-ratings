@@ -97,7 +97,7 @@
 
 <div class="card">
   <h2 style="margin-top:0;font-size:1.1rem;">Schedule</h2>
-  <p class="muted" style="margin-top:0;">Final scores when played; projected win % for remaining games.</p>
+  <p class="muted" style="margin-top:0;">Final scores when played; projected win % for remaining games. Opponent ranks are overall for week {{ meta.current_week }}.</p>
   {% if team_schedule %}
   <div class="table-scroll">
   <table class="data-table schedule-table">
@@ -118,8 +118,9 @@
         <td data-value="{{ g.game_date }}">{{ g.game_date }}</td>
         <td class="num" data-value="{{ g.week }}">{{ g.week }}</td>
         <td data-value="{{ g.opponent_name }}">
+          {% if g.opponent_rank %}<span class="schedule-opponent-rank">#{{ g.opponent_rank }}</span>{% endif %}
           <a class="schedule-opponent" href="{{ url_for('team_detail', team_id=g.opponent_id) }}" onclick="event.stopPropagation()">{{ g.opponent_name }}</a>
-          {% if g.is_conference_game %}<span class="badge" style="background:{{ team.conference | conf_color }};font-size:0.65rem;margin-left:0.25rem;">conf</span>{% endif %}
+          {% if g.is_conference_championship %}<span class="badge badge-ccg" title="Conference championship game">conf title</span>{% elif g.is_conference_game %}<span class="badge" style="background:{{ team.conference | conf_color }};font-size:0.65rem;margin-left:0.25rem;">conf</span>{% endif %}
         </td>
         <td data-value="{{ g.home_away }}">
           {% if g.home_away == 'home' %}Home{% elif g.home_away == 'away' %}Away{% else %}Neutral{% endif %}

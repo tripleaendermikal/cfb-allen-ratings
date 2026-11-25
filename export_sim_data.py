@@ -1412,6 +1412,8 @@ def build_games(
     schedule: list[dict],
     conf_by_id: dict[str, str],
     margin_lists: dict[tuple[str, str], list[float]],
+    *,
+    conference_championship_game_ids: frozenset[str] = frozenset(),
 ) -> dict[str, dict]:
     """Per-game detail records keyed by game_id (home-team perspective)."""
     by_id: dict[str, dict] = {}
@@ -1483,6 +1485,7 @@ def build_games(
             "home_win_pct": home_wp,
             "avg_margin": avg_margin,
             "is_conference_game": is_conf,
+            "is_conference_championship": gid in conference_championship_game_ids,
             "is_pac12_flex": is_flex,
             "margin_histogram": build_margin_histogram(adjusted_home_margins),
         }
@@ -1848,7 +1851,21 @@ def main() -> int:
     full_schedule, schedule = build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
     merge_team_sos(teams, leaderboard, build_team_sos(full_schedule))
     conferences = build_conferences(teams, leaderboard, eligibility["fields"], n_sims)
-    games = build_games(schedule, conf_by_id, margin_lists)
+    from cfb_conf_championship import (
+        load_scheduled_ccg_by_conference,
+        scheduled_ccg_game_ids,
+    )
+
+    scheduled_ccg = load_scheduled_ccg_by_conference(
+        SOURCES["games_fpi"], conf_by_id
+    )
+    ccg_game_ids = scheduled_ccg_game_ids(scheduled_ccg)
+    games = build_games(
+        schedule,
+        conf_by_id,
+        margin_lists,
+        conference_championship_game_ids=ccg_game_ids,
+    )
     game_slugs = build_game_slugs(games)
     conf_championship = build_conf_championship(sim_cols, id_to_name)
     conf_results = compute_conf_results_by_sim(
@@ -1856,11 +1873,6 @@ def main() -> int:
     )
     h2h_wins_by_col, h2h_games_by_col = build_season_h2h_by_sim(game_rows, sim_cols)
     sos_by_team_id = load_sos_by_team_id(SOURCES["games_fpi"])
-    from cfb_conf_championship import load_scheduled_ccg_by_conference
-
-    scheduled_ccg = load_scheduled_ccg_by_conference(
-        SOURCES["games_fpi"], conf_by_id
-    )
     brackets = build_brackets(
         eligibility,
         sim_cols,

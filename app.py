@@ -363,6 +363,7 @@ class DataStore:
         self._legacy_conf_championship: dict | None = None
         self._legacy_eligibility_fields: list | None = None
         self._previous_years: dict | None = None
+        self._ccg_game_ids: frozenset[str] | None = None
 
         self.teams_by_id = {t["team_id"]: t for t in self.teams}
         slug_data = self._load_optional(data_dir / "game_slugs.json") or {}
@@ -501,6 +502,34 @@ class DataStore:
             if row.get("team_id") == team_id:
                 return row
         return dict(self.lb_by_id.get(team_id, {}))
+
+    def overall_rank_by_team_id(self, week: int | None = None) -> dict[str, int]:
+        """Overall leaderboard rank (1-based) keyed by team_id for one week."""
+        if week is None:
+            default_week = self.meta.get("current_week") or (
+                self.ranking_weeks[-1] if self.ranking_weeks else 0
+            )
+            week = int(default_week)
+        return {
+            row["team_id"]: row["display_rank"]
+            for row in self.leaderboard_for_week(week, ranking_mode="overall")
+            if row.get("team_id") and row.get("display_rank")
+        }
+
+    @property
+    def ccg_game_ids(self) -> frozenset[str]:
+        if self._ccg_game_ids is None:
+            from cfb_conf_championship import infer_conference_championship_game_ids
+
+            explicit = frozenset(
+                (g.get("game_id") or "")
+                for g in self.games.values()
+                if g.get("is_conference_championship") and (g.get("game_id") or "")
+            )
+            self._ccg_game_ids = explicit | infer_conference_championship_game_ids(
+                self.games
+            )
+        return self._ccg_game_ids
 
     @property
     def ranking_weeks(self) -> list[int]:
@@ -797,27 +826,37 @@ class DataStore:
     def game_url_key(self, game_id: str) -> str:
         return self.id_to_slug.get(str(game_id), str(game_id))
 
-    def team_schedule(self, team_id: str) -> list[dict]:
+    def team_schedule(
+        self,
+        team_id: str,
+        *,
+        opponent_ranks: dict[str, int] | None = None,
+    ) -> list[dict]:
         """This team's games with win odds and home/away from their perspective."""
         tid = str(team_id)
+        ccg_ids = self.ccg_game_ids
         rows: list[dict] = []
         for g in self.games.values():
             gid = g.get("game_id", "")
+            is_ccg = bool(g.get("is_conference_championship")) or gid in ccg_ids
             neutral = g.get("neutral_site", False)
             home_wp = g.get("home_win_pct")
             margin = g.get("avg_margin")
             if g.get("home_team_id") == tid:
+                opp_id = g.get("away_team_id", "")
                 rows.append(
                     {
                         "game_id": gid,
                         "game_date": g.get("game_date", ""),
                         "week": g.get("week"),
-                        "opponent_id": g.get("away_team_id", ""),
+                        "opponent_id": opp_id,
                         "opponent_name": g.get("away_team_name", ""),
+                        "opponent_rank": (opponent_ranks or {}).get(str(opp_id)),
                         "win_pct": home_wp,
                         "avg_margin": margin,
                         "home_away": "neutral" if neutral else "home",
                         "is_conference_game": g.get("is_conference_game", False),
+                        "is_conference_championship": is_ccg,
                         "completed": g.get("completed", False),
                         "team_score": g.get("home_score"),
                         "opponent_score": g.get("away_score"),
@@ -826,17 +865,20 @@ class DataStore:
             elif g.get("away_team_id") == tid:
                 away_wp = round(100 - float(home_wp), 2) if home_wp is not None else None
                 away_margin = round(-float(margin), 3) if margin is not None else None
+                opp_id = g.get("home_team_id", "")
                 rows.append(
                     {
                         "game_id": gid,
                         "game_date": g.get("game_date", ""),
                         "week": g.get("week"),
-                        "opponent_id": g.get("home_team_id", ""),
+                        "opponent_id": opp_id,
                         "opponent_name": g.get("home_team_name", ""),
+                        "opponent_rank": (opponent_ranks or {}).get(str(opp_id)),
                         "win_pct": away_wp,
                         "avg_margin": away_margin,
                         "home_away": "neutral" if neutral else "away",
                         "is_conference_game": g.get("is_conference_game", False),
+                        "is_conference_championship": is_ccg,
                         "completed": g.get("completed", False),
                         "team_score": g.get("away_score"),
                         "opponent_score": g.get("home_score"),
@@ -1222,7 +1264,9 @@ def create_app() -> Flask:
         merged["median_wins"] = median_wins
         merged["bowl_eligibility_pct"] = bowl_eligibility_pct
         bracket_summary = store.brackets_summary.get("team_summary", {}).get(team_id)
-        team_schedule = store.team_schedule(team_id)
+        team_schedule = store.team_schedule(
+            team_id, opponent_ranks=store.overall_rank_by_team_id()
+        )
         conference = merged.get("conference", "")
         team_theme = build_team_theme(team, conference)
         hist_labels = [str(i) for i in range(13)]

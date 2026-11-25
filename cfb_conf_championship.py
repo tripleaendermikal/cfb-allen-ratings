@@ -106,6 +106,40 @@ def scheduled_ccg_game_ids(scheduled: dict[str, ScheduledCcg]) -> frozenset[str]
     )
 
 
+def infer_conference_championship_game_ids(
+    games: dict[str, dict[str, Any]],
+) -> frozenset[str]:
+    """Detect week-14 conference title games from exported ``games.json`` records."""
+    by_conf: dict[str, str] = {}
+    for g in games.values():
+        if str(g.get("week") or "") != str(CCG_WEEK):
+            continue
+        home_id = (g.get("home_team_id") or "").strip()
+        away_id = (g.get("away_team_id") or "").strip()
+        home_conf = (g.get("home_conference") or "").strip()
+        away_conf = (g.get("away_conference") or "").strip()
+        if not home_conf or home_conf == FBS_INDEP:
+            continue
+        home_tbd = is_tbd_team_id(home_id, g.get("home_team_name", ""))
+        away_tbd = is_tbd_team_id(away_id, g.get("away_team_name", ""))
+        if home_tbd and away_tbd:
+            continue
+        if not home_tbd and not away_tbd:
+            if home_conf != away_conf:
+                continue
+        elif away_tbd and not home_tbd:
+            pass
+        elif home_tbd and not away_tbd:
+            if away_conf and away_conf != home_conf:
+                continue
+        gid = (g.get("game_id") or "").strip()
+        if not gid:
+            continue
+        if home_conf not in by_conf:
+            by_conf[home_conf] = gid
+    return frozenset(by_conf.values())
+
+
 def partial_scheduled_ccg_game_ids(scheduled: dict[str, ScheduledCcg]) -> frozenset[str]:
     return frozenset(
         s.game_id
