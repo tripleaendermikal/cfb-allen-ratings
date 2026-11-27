@@ -236,7 +236,7 @@
     {{ playoff_hist_labels | tojson }},
     {{ playoff_hist_data | tojson }},
     confColor,
-    { xTitle: 'Teams in playoff field', yTitle: 'Simulations' }
+    { xTitle: 'Teams in playoff field', yTitle: '% of simulations', yPercent: true, ySuggestedMax: 100 }
   );
   {% endif %}
 </script>

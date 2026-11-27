@@ -1626,7 +1626,14 @@ def create_app() -> Flask:
             deep = store.conference_deep.get(conf_name, {})
             playoff_hist = deep.get("playoff_teams_per_sim", {})
             playoff_hist_labels = list(playoff_hist.keys())
-            playoff_hist_data = [playoff_hist[k] for k in playoff_hist_labels]
+            hist_total = sum(int(playoff_hist[k]) for k in playoff_hist_labels)
+            n_hist_sims = store.season_sim_count or hist_total or 1
+            if hist_total and hist_total != n_hist_sims:
+                n_hist_sims = hist_total
+            playoff_hist_data = [
+                round(int(playoff_hist[k]) / n_hist_sims * 100, 2)
+                for k in playoff_hist_labels
+            ]
 
             sim_raw = request.args.get("sim", "").strip()
             sim_index = None
