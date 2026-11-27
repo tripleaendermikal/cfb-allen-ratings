@@ -976,17 +976,25 @@ def home_field_adjustment(neutral_site: str, home_away: str) -> float:
     return 0.0
 
 
-def build_team_sos(full_schedule: list[dict]) -> dict[str, float]:
-    """Per-team SOS: mean opponent Rating adjusted for home/away (+3 home, -3 away)."""
-    by_team: dict[str, list[float]] = {}
-    for row in full_schedule:
-        tid = row.get("team_id", "")
-        opp_fpi = row.get("opponent_fpi")
-        if not tid or opp_fpi is None:
-            continue
-        hfa = home_field_adjustment(row.get("neutral_site", ""), row.get("home_away", ""))
-        by_team.setdefault(tid, []).append(float(opp_fpi) - hfa)
-    return {tid: round(sum(vals) / len(vals), 2) for tid, vals in by_team.items() if vals}
+def build_team_sos(
+    full_schedule: list[dict],
+    team_ratings: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Per-team SOS: equivalent neutral opponent from mean expected win% on the schedule."""
+    from cfb_team_sos import compute_equivalent_sos_from_schedule
+
+    ratings: dict[str, float] = dict(team_ratings or {})
+    if not ratings:
+        for row in full_schedule:
+            tid = (row.get("team_id") or "").strip()
+            raw = row.get("team_fpi")
+            if tid and raw is not None and tid not in ratings:
+                ratings[tid] = float(raw)
+            oid = (row.get("opponent_id") or "").strip()
+            oraw = row.get("opponent_fpi")
+            if oid and oraw is not None and oid not in ratings:
+                ratings[oid] = float(oraw)
+    return compute_equivalent_sos_from_schedule(full_schedule, ratings)
 
 
 def merge_team_sos(
@@ -1849,7 +1857,12 @@ def main() -> int:
     margin_lists = load_margin_lists(resolve_margin_source(SOURCES), sim_cols)
     margin_map = load_avg_margins(margin_lists)
     full_schedule, schedule = build_schedule(game_rows, sim_cols, margin_map, conf_by_id)
-    merge_team_sos(teams, leaderboard, build_team_sos(full_schedule))
+    overall_by_id = {
+        row["team_id"]: float(row["overall_margin"])
+        for row in leaderboard
+        if row.get("team_id") and row.get("overall_margin") is not None
+    }
+    merge_team_sos(teams, leaderboard, build_team_sos(full_schedule, overall_by_id))
     conferences = build_conferences(teams, leaderboard, eligibility["fields"], n_sims)
     from cfb_conf_championship import (
         load_scheduled_ccg_by_conference,

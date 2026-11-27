@@ -39,6 +39,8 @@ _STANDING_CONF_RE = re.compile(r"\bin\s+(.+?)(?:\s+-\s+|$)", re.IGNORECASE)
 
 _NAME_TO_CANONICAL = {
     "American Conference": "American",
+    "American Athletic": "American",
+    "American Athletic Conference": "American",
     "Atlantic Coast Conference": "ACC",
     "Big 12 Conference": "Big 12",
     "Big Ten Conference": "Big Ten",

@@ -406,7 +406,14 @@ def main() -> int:
         _, base_rows = esd.read_csv(SOURCES["games_base"])
         enrich_schedule_scores(schedule, base_rows)
 
-    esd.merge_team_sos(teams, leaderboard, esd.build_team_sos(full_schedule))
+    overall_by_id = {
+        row["team_id"]: float(row["overall_margin"])
+        for row in leaderboard
+        if row.get("team_id") and row.get("overall_margin") is not None
+    }
+    esd.merge_team_sos(
+        teams, leaderboard, esd.build_team_sos(full_schedule, overall_by_id)
+    )
     trad_fields = all_fields[:trad_sim_count]
     conferences = esd.build_conferences(teams, leaderboard, trad_fields, trad_sim_count)
     from cfb_conf_championship import load_scheduled_ccg_by_conference, scheduled_ccg_game_ids

@@ -14,6 +14,7 @@ from cfb_matchup import (
     pick_game_for_site,
     project_from_ratings,
 )
+from cfb_power_classification import filter_rows_by_power, parse_power_filter
 from cfb_rating.in_season import compute_overall_margin
 
 APP_DIR = Path(__file__).resolve().parent
@@ -445,6 +446,8 @@ class DataStore:
             row["resume_title_odds_pct"] = lb_row.get("resume_title_odds_pct")
             row["display_playoff_pct"] = _leaderboard_playoff_pct(row, ranking_mode)
             row["display_title_pct"] = _leaderboard_title_pct(row, ranking_mode)
+            if row.get("sos") is None:
+                row["sos"] = self.teams_by_id.get(tid, {}).get("sos")
             rows.append(row)
 
         if ranking_mode == "algorithm":
@@ -643,11 +646,16 @@ class DataStore:
         payload = self.prior_season_payload(season_year)
         by_week = payload.get("by_week") or {}
         raw_rows = list(by_week.get(str(week)) or [])
+        sos_by_team = payload.get("sos_by_team") or {}
         rows: list[dict] = []
         for row in raw_rows:
             if not is_fbs_conference(row.get("conference", "")):
                 continue
-            rows.append(dict(row))
+            enriched = dict(row)
+            tid = enriched.get("team_id")
+            if enriched.get("sos") is None and tid and tid in sos_by_team:
+                enriched["sos"] = sos_by_team[tid]
+            rows.append(enriched)
 
         if ranking_mode == "resume":
             rows.sort(
@@ -1129,6 +1137,7 @@ def create_app() -> Flask:
     @app.route("/")
     def leaderboard():
         conf_filter = request.args.get("conference", "").strip()
+        power_filter = parse_power_filter(request.args.get("power"))
         week_raw = request.args.get("week", "").strip()
         ranking_mode = request.args.get("mode", "overall").strip().lower()
         if ranking_mode not in ("overall", "algorithm", "resume", "forecast_resume"):
@@ -1147,11 +1156,15 @@ def create_app() -> Flask:
         rows = store.leaderboard_for_week(week, ranking_mode=ranking_mode)
         if conf_filter:
             rows = [r for r in rows if r.get("conference") == conf_filter]
+        season_year = int(store.meta.get("season_year") or 2026)
+        rows = filter_rows_by_power(rows, season_year, power_filter)
         return render_template(
             "leaderboard.html",
             rows=rows,
             conferences=store.conference_names,
             conf_filter=conf_filter,
+            power_filter=power_filter,
+            season_year=season_year,
             week=week,
             weeks=store.ranking_weeks,
             ranking_mode=ranking_mode,
@@ -1187,9 +1200,11 @@ def create_app() -> Flask:
             ranking_mode = "overall"
 
         conf_filter = request.args.get("conference", "").strip()
+        power_filter = parse_power_filter(request.args.get("power"))
         rows = store.previous_season_rows(season, week, ranking_mode=ranking_mode)
         if conf_filter:
             rows = [r for r in rows if r.get("conference") == conf_filter]
+        rows = filter_rows_by_power(rows, season, power_filter)
 
         conferences = store.prior_conference_names(season, week)
         week_labels = store.prior_season_week_labels(season)
@@ -1206,6 +1221,7 @@ def create_app() -> Flask:
             ranking_mode=ranking_mode,
             conferences=conferences,
             conf_filter=conf_filter,
+            power_filter=power_filter,
             active="previous_years",
         )
 

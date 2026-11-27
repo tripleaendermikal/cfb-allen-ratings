@@ -93,33 +93,25 @@ def home_field_adjustment(neutral_site, home_away):
 
 
 def load_sos_by_team_id(path):
-    """team_id -> static SOS from schedule (opponent FPI adjusted for site)."""
-    from pac12_week13 import FLEX_FLAG_COL, FLEX_FLAG_VALUE, PAC12_FLEX_OPPONENT_ID
+    """team_id -> SOS (equivalent neutral opponent from expected win% on schedule)."""
+    from cfb_team_sos import compute_equivalent_sos_from_schedule
 
-    by_team: dict[str, list[float]] = {}
+    rows: list[dict] = []
+    ratings: dict[str, float] = {}
     with Path(path).open(newline="", encoding="utf-8-sig") as infile:
         reader = csv.DictReader(infile)
         for row in reader:
-            tid = (row.get("team_id") or "").strip()
-            oid = (row.get("opponent_id") or "").strip()
-            opp_raw = (row.get("opponent_fpi") or "").strip()
-            if not tid or not opp_raw:
-                continue
-            if oid == PAC12_FLEX_OPPONENT_ID or (
-                row.get(FLEX_FLAG_COL) or ""
-            ).strip() == FLEX_FLAG_VALUE:
-                continue
-            try:
-                opp_fpi = float(opp_raw)
-            except ValueError:
-                continue
-            hfa = home_field_adjustment(
-                row.get("neutral_site", ""), row.get("home_away", "")
-            )
-            by_team.setdefault(tid, []).append(opp_fpi - hfa)
-    return {
-        tid: round(sum(vals) / len(vals), 2) for tid, vals in by_team.items() if vals
-    }
+            rows.append(row)
+            for tid_key, fpi_key in (("team_id", "team_fpi"), ("opponent_id", "opponent_fpi")):
+                tid = (row.get(tid_key) or "").strip()
+                raw = (row.get(fpi_key) or "").strip()
+                if not tid or not raw:
+                    continue
+                try:
+                    ratings.setdefault(tid, float(raw))
+                except ValueError:
+                    continue
+    return compute_equivalent_sos_from_schedule(rows, ratings)
 
 
 def team_sos(sos_by_team_id, team_id):

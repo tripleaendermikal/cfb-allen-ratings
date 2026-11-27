@@ -32,10 +32,18 @@
     </select>
   </label>
   <label>
+    Tier
+    <select name="power" onchange="this.form.submit()" title="Power membership rules depend on season ({{ season_year }})">
+      <option value="" {% if not power_filter %}selected{% endif %}>All FBS</option>
+      <option value="power" {% if power_filter == 'power' %}selected{% endif %}>Power</option>
+      <option value="non_power" {% if power_filter == 'non_power' %}selected{% endif %}>Non-Power</option>
+    </select>
+  </label>
+  <label>
     Search
     <input type="search" id="leaderboard-search" placeholder="Filter teams…">
   </label>
-  {% if conf_filter or ranking_mode not in ('overall',) %}
+  {% if conf_filter or power_filter or ranking_mode not in ('overall',) %}
   <a href="{{ url_for('leaderboard', week=week) }}" class="btn" style="text-decoration:none;display:inline-block;">Reset filters</a>
   {% endif %}
 </form>
@@ -59,6 +67,7 @@
       <th data-sort="num">No Preseason</th>
       {% endif %}
       <th data-sort="text">Record</th>
+      <th data-sort="num">SOS</th>
       <th data-sort="num">Fcst Wins</th>
       <th data-sort="num">{% if ranking_mode in ('resume', 'forecast_resume') %}Resume Playoff %{% else %}Playoff %{% endif %}</th>
       <th data-sort="num">{% if ranking_mode in ('resume', 'forecast_resume') %}Resume Title %{% else %}Title %{% endif %}</th>
@@ -101,6 +110,9 @@
       </td>
       {% endif %}
       <td class="num" data-value="{{ row.record or '' }}">{{ row.record or '—' }}</td>
+      <td class="num" data-value="{{ row.sos if row.sos is not none else '' }}">
+        {% if row.sos is not none %}{{ "%+.1f"|format(row.sos) }}{% else %}—{% endif %}
+      </td>
       <td class="num" data-value="{{ row.forecasted_wins if row.forecasted_wins is not none else '' }}">
         {% if row.forecasted_wins is not none %}{{ "%.2f"|format(row.forecasted_wins) }}{% else %}—{% endif %}
       </td>
