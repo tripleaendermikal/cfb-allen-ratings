@@ -190,6 +190,13 @@ def prepare_conference(conf: dict, store: "DataStore") -> dict:
         sum(float(t.get("title_odds_pct") or 0) for t in teams),
         2,
     )
+    if prepared.get("avg_teams_in_field") is None:
+        deep = store.conference_deep.get(prepared["conference"], {})
+        hist = deep.get("playoff_teams_per_sim") or {}
+        n_sims = store.season_sim_count
+        if hist and n_sims:
+            total = sum(int(k) * int(v) for k, v in hist.items())
+            prepared["avg_teams_in_field"] = round(total / n_sims, 2)
     return prepared
 
 

@@ -22,7 +22,7 @@
       Avg Overall: {% if c.avg_overall is not none %}{{ "%+.1f"|format(c.avg_overall) }}{% else %}—{% endif %}
     </div>
     <div class="muted" style="font-size:0.85rem;margin-top:0.25rem;">
-      {{ c.team_count }} teams · {{ c.sims_with_member_pct }}% of sims with member
+      {{ c.team_count }} teams · {{ "%.2f"|format(c.avg_teams_in_field or 0) }} avg in field
     </div>
   </a>
   {% endfor %}
@@ -35,8 +35,7 @@
       <th data-sort="num">Teams</th>
       <th data-sort="num">Avg Overall</th>
       <th data-sort="num">Title Odds Σ</th>
-      <th data-sort="num">Sims w/ Member</th>
-      <th data-sort="num">Member %</th>
+      <th data-sort="num">Avg in Field</th>
     </tr>
   </thead>
   <tbody>
@@ -52,8 +51,9 @@
         {% if c.avg_overall is not none %}{{ "%+.1f"|format(c.avg_overall) }}{% else %}—{% endif %}
       </td>
       <td class="num" data-value="{{ c.total_title_odds_pct }}">{{ c.total_title_odds_pct }}%</td>
-      <td class="num" data-value="{{ c.sims_with_member }}">{{ c.sims_with_member }}</td>
-      <td class="num" data-value="{{ c.sims_with_member_pct }}">{{ c.sims_with_member_pct }}%</td>
+      <td class="num" data-value="{{ c.avg_teams_in_field if c.avg_teams_in_field is not none else '' }}">
+        {% if c.avg_teams_in_field is not none %}{{ "%.2f"|format(c.avg_teams_in_field) }}{% else %}—{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

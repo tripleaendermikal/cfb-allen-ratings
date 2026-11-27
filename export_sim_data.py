@@ -373,7 +373,7 @@ def build_conference_summary_text(
 ) -> str:
     is_g6 = bool(conf_row.get("is_group_of_6"))
     total_title = float(conf_row.get("total_title_odds_pct") or 0)
-    sims_member_pct = float(conf_row.get("sims_with_member_pct") or 0)
+    avg_teams_in_field = float(conf_row.get("avg_teams_in_field") or 0)
     favorite_name = conf_row.get("conf_favorite_name")
     favorite_odds = float(conf_row.get("conf_favorite_odds_pct") or 0)
     teams = list(conf_row.get("teams") or [])
@@ -388,7 +388,8 @@ def build_conference_summary_text(
         identity = (
             f"The {conference} is a Group of 6 league in the "
             f"{model_label(season_year, mode)}, "
-            f"with a member in the playoff field in {sims_member_pct:.1f}% of {sim_count} simulations."
+            f"averaging {avg_teams_in_field:.2f} teams in the playoff field across "
+            f"{sim_count} simulations."
         )
         if total_title >= 0.05:
             identity += f" The league accounts for {total_title:.2f}% of national title equity."
@@ -1227,7 +1228,12 @@ def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[l
         if not is_fbs_conference(conf):
             continue
         team_ids = {m["team_id"] for m in members}
-        conf_fields_with_member = sum(1 for field in fields if any(tid in team_ids for tid in field))
+        members_in_field_total = sum(
+            sum(1 for tid in field if tid in team_ids) for field in fields
+        )
+        avg_teams_in_field = (
+            round(members_in_field_total / n_sims, 2) if n_sims else 0.0
+        )
         playoff_apps = sum(
             _combined_playoff_appearances(lb_by_id.get(m["team_id"], {})) for m in members
         )
@@ -1270,8 +1276,7 @@ def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[l
                 "conf_favorite_name": conf_favorite_name,
                 "conf_favorite_odds_pct": conf_favorite_odds_pct,
                 "total_playoff_appearances": playoff_apps,
-                "sims_with_member": conf_fields_with_member,
-                "sims_with_member_pct": round(conf_fields_with_member / n_sims * 100, 2) if n_sims else 0,
+                "avg_teams_in_field": avg_teams_in_field,
                 "teams": sorted(
                     [
                         {

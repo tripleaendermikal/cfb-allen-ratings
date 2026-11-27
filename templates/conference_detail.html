@@ -13,7 +13,7 @@
     <h1><span class="badge conf-hero-badge">{{ conf.conference }}</span></h1>
     <p class="subtitle conf-hero-sub">
       {% if conf.is_group_of_6 %}Group of 6 · {% endif %}
-      {{ conf.team_count }} teams · {{ conf.sims_with_member_pct }}% of sims include a member
+      {{ conf.team_count }} teams · {{ "%.2f"|format(conf.avg_teams_in_field or 0) }} avg teams in field
     </p>
   </header>
 
