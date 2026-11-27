@@ -414,8 +414,7 @@ def main() -> int:
     esd.merge_team_sos(
         teams, leaderboard, esd.build_team_sos(full_schedule, overall_by_id)
     )
-    trad_fields = all_fields[:trad_sim_count]
-    conferences = esd.build_conferences(teams, leaderboard, trad_fields, trad_sim_count)
+    conferences = esd.build_conferences(teams, leaderboard, all_fields, n_sims)
     from cfb_conf_championship import load_scheduled_ccg_by_conference, scheduled_ccg_game_ids
 
     scheduled_ccg = load_scheduled_ccg_by_conference(
@@ -474,9 +473,9 @@ def main() -> int:
         conferences,
         conf_championship["champions_by_sim"],
         conf_championship["finalists_by_sim"],
-        trad_fields,
+        all_fields,
         id_to_name,
-        trad_sim_count,
+        n_sims,
     )
 
     season_year = 2026
