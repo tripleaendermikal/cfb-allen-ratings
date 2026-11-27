@@ -11,7 +11,7 @@ from pathlib import Path
 from cfb_paths import REPO_ROOT, data_root
 from cfb_rating.in_season import load_preseason_margins
 from cfb_rating.season_data import load_espn_games
-from cfb_team_sos import compute_team_sos_from_games
+from cfb_team_sos import compute_equivalent_sos_from_game_records
 from export_previous_years import default_paths_for_season
 
 
@@ -37,11 +37,20 @@ def patch_season(
         season_year=season_year,
         single_postseason_week=True,
     )
-    preseason = load_preseason_margins(
-        preseason_path,
-        teams_path=teams_path if teams_path.is_file() else None,
-    )
-    sos_map = compute_team_sos_from_games(games, preseason)
+    payload_pre = archive.get("seasons", {}).get(str(season_year), {})
+    final_week = payload_pre.get("final_week")
+    by_week = payload_pre.get("by_week") or {}
+    ratings = {
+        row["team_id"]: float(row["overall_margin"])
+        for row in by_week.get(str(final_week), [])
+        if row.get("team_id") and row.get("overall_margin") is not None
+    }
+    if not ratings:
+        ratings = load_preseason_margins(
+            preseason_path,
+            teams_path=teams_path if teams_path.is_file() else None,
+        )
+    sos_map = compute_equivalent_sos_from_game_records(games, ratings)
 
     season_key = str(season_year)
     seasons = archive.setdefault("seasons", {})

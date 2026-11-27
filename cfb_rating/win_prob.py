@@ -21,6 +21,13 @@ def win_probability_from_margin(margin: float, home_flag_val: float) -> float:
     return math.exp(x) / (1.0 + math.exp(x))
 
 
+def equivalent_opponent_margin(team_margin: float, mean_win_pct: float) -> float:
+    """Neutral-site opponent margin with the same logistic as ``win_probability_from_margin``."""
+    p = min(max(float(mean_win_pct), 1e-9), 1.0 - 1e-9)
+    logit = math.log(p / (1.0 - p))
+    return float(team_margin) - logit / 0.175
+
+
 def team_win_probability(
     team_id: str,
     home_team_id: str,

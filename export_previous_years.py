@@ -142,11 +142,19 @@ def build_season_export(
     for row in rows:
         by_week_rows[row.week].append(row)
 
+    weeks = sorted(by_week_rows.keys())
     sos_source = list(rec_source) if record_games is not None else list(games)
-    sos_by_team = compute_team_sos_from_games(sos_source, preseason_margins)
+    final_week_key = weeks[-1] if weeks else 0
+    end_of_season_ratings = {
+        r.team_id: float(r.overall_margin)
+        for r in by_week_rows.get(final_week_key, [])
+    }
+    sos_by_team = compute_team_sos_from_games(
+        sos_source,
+        end_of_season_ratings or preseason_margins,
+    )
 
     by_week_json: dict[str, list[dict]] = {}
-    weeks = sorted(by_week_rows.keys())
     record_cap = max(
         max_week,
         max((g.week or 0) for g in rec_source) if rec_source else max_week,
