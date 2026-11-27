@@ -76,19 +76,32 @@ def in_season_margins(season_year: int) -> tuple[dict[str, float], dict[str, tup
 def predict_2027_rankings(write_csv: Path | None = PREDICTED_2027_CSV) -> list[dict]:
     """Model B projection for 2027 using final-week margins 2023–2025 and in-season 2026."""
     lag_years = (2023, 2024, 2025, 2026)
+    archived_years = (2023, 2024, 2025)
     data: dict[int, dict[str, float]] = {}
     meta: dict[int, dict[str, tuple[str, str]]] = {}
     week_2026: int | None = None
-    for year in (2023, 2024, 2025):
+    for year in archived_years:
         data[year], meta[year] = final_season_table(year)
     data[2026], meta[2026], week_2026 = in_season_margins(2026)
 
-    team_ids = sorted(set.intersection(*[set(data[y]) for y in lag_years]))
+    # Full current FBS pool (week snapshot), not only teams with four archive seasons.
+    team_ids = sorted(
+        meta[2026].keys(),
+        key=lambda tid: meta[2026].get(tid, ("", ""))[0],
+    )
     rows_out: list[dict] = []
     def predicted_margin(tid: str) -> float:
         conf = meta[2026].get(tid, meta[2025].get(tid, ("", "")))[1]
-        linear = sum(MODEL_B_BETA_BY_SLOT[i] * data[lag_years[i]][tid] for i in range(4))
+        linear = 0.0
+        for i, year in enumerate(lag_years):
+            if tid in data[year]:
+                linear += MODEL_B_BETA_BY_SLOT[i] * data[year][tid]
         return linear + MODEL_B_ALPHAS[group_for_team(tid, conf)]
+
+    def lag_value(tid: str, year: int) -> str:
+        if tid not in data[year]:
+            return ""
+        return f"{data[year][tid]:.4f}"
 
     for rank, team_id in enumerate(
         sorted(team_ids, key=lambda tid: -predicted_margin(tid)),
@@ -97,7 +110,7 @@ def predict_2027_rankings(write_csv: Path | None = PREDICTED_2027_CSV) -> list[d
         conf = meta[2026].get(team_id, meta[2025].get(team_id, ("", "")))[1]
         g = group_for_team(team_id, conf)
         predicted = predicted_margin(team_id)
-        name = meta[2026].get(team_id, meta[2025][team_id])[0]
+        name = meta[2026].get(team_id, meta[2025].get(team_id, ("", "")))[0]
         rows_out.append(
             {
                 "rank": rank,
@@ -106,10 +119,10 @@ def predict_2027_rankings(write_csv: Path | None = PREDICTED_2027_CSV) -> list[d
                 "conference": conf,
                 "group": g + 1,
                 "predicted_overall_margin_2027": round(predicted, 4),
-                "r_2023": round(data[2023][team_id], 4),
-                "r_2024": round(data[2024][team_id], 4),
-                "r_2025": round(data[2025][team_id], 4),
-                "r_2026": round(data[2026][team_id], 4),
+                "r_2023": lag_value(team_id, 2023),
+                "r_2024": lag_value(team_id, 2024),
+                "r_2025": lag_value(team_id, 2025),
+                "r_2026": lag_value(team_id, 2026),
             }
         )
 
