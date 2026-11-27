@@ -35,13 +35,6 @@
       <div class="stat-value">{{ deep.playoff_share_pct or 0 }}%</div>
       <div class="muted" style="font-size:0.8rem;">Member slots in playoff field</div>
     </div>
-    {% if deep.get('title_top3_share_pct') is not none %}
-    <div class="card conf-accent-card">
-      <div class="stat-label">Title Odds Concentration</div>
-      <div class="stat-value">{{ deep.title_top3_share_pct }}%</div>
-      <div class="muted" style="font-size:0.8rem;">Top 3 teams' share of this conference's title odds</div>
-    </div>
-    {% endif %}
     {% if conf.avg_overall is not none %}
     <div class="card conf-accent-card">
       <div class="stat-label">Avg Overall</div>
