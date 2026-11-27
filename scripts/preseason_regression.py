@@ -15,6 +15,7 @@ from scipy.optimize import lsq_linear, nnls
 ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_YEARS = ROOT / "data" / "previous_years.json"
 RANKINGS_JSON = ROOT / "data" / "rankings.json"
+WEEKLY_RANKINGS_CSV = ROOT / "cfb_data" / "cfb_2026_in_season_weekly_rankings.csv"
 PREDICTED_2027_CSV = ROOT / "data" / "preseason_2027_predicted_rankings.csv"
 
 # Model B coefficients (fixed after fit on 2025 holdout; see preseason_regression.md)
@@ -55,14 +56,39 @@ def final_season_table(season: int) -> tuple[dict[str, float], dict[str, tuple[s
 
 
 def in_season_margins(season_year: int) -> tuple[dict[str, float], dict[str, tuple[str, str]], int]:
-    """Overall margin from live rankings export (current week, not final)."""
+    """Overall margin from latest weekly rankings (CSV preferred over viewer JSON)."""
+    if WEEKLY_RANKINGS_CSV.is_file():
+        import csv
+
+        week_rows: dict[int, list[dict[str, str]]] = defaultdict(list)
+        with WEEKLY_RANKINGS_CSV.open(newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                week_raw = row.get("week")
+                if not week_raw:
+                    continue
+                week_rows[int(week_raw)].append(row)
+        if week_rows:
+            week = max(week_rows)
+            rows = week_rows[week]
+            margins: dict[str, float] = {}
+            meta: dict[str, tuple[str, str]] = {}
+            for row in rows:
+                overall = row.get("overall_margin")
+                if not overall:
+                    continue
+                team_id = row["team_id"]
+                margins[team_id] = float(overall)
+                meta[team_id] = (row["team_name"], row.get("conference", "") or "")
+            return margins, meta, week
+
     payload = json.loads(RANKINGS_JSON.read_text())
     if payload.get("current_week") is None:
         raise SystemExit("rankings.json missing current_week")
     week = int(payload["current_week"])
     rows = payload["by_week"].get(str(week)) or payload["by_week"][week]
-    margins: dict[str, float] = {}
-    meta: dict[str, tuple[str, str]] = {}
+    margins = {}
+    meta = {}
     for row in rows:
         overall = row.get("overall_margin")
         if overall is None:

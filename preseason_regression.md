@@ -129,7 +129,7 @@ Last run metrics embedded in that script match the tables above (exported_at on 
 
 Use the **Model B** coefficients and group intercepts above. For a target season **T**, use final-week `overall_margin` from seasons **T−4 … T−1**, each multiplied by the matching slot weight \((\beta_{2021}, \beta_{2022}, \beta_{2023}, \beta_{2024})\) from the fit, then add \(\alpha_g\).
 
-For **2027** that is ratings from **2023, 2024, 2025, and 2026** (within the **2022–2026** history window, the four seasons immediately before 2027). **2026** is taken from **in-season week 13** `overall_margin` in `data/rankings.json` (not a completed season).
+For **2027** that is ratings from **2023, 2024, 2025, and 2026** (within the **2022–2026** history window, the four seasons immediately before 2027). **2026** is taken from the **latest in-season week** in `cfb_2026_in_season_weekly_rankings.csv` (preferred) or `data/rankings.json` (not a completed season).
 
 \[
 \hat{r}_{2027}
