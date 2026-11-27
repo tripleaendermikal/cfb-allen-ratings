@@ -10,10 +10,18 @@ from pathlib import Path
 from unittest import mock
 
 import cfb_historical_conferences as hist
-from cfb_historical_conferences import fbs_team_ids_for_season
+from cfb_historical_conferences import (
+    fbs_team_ids_for_season,
+    is_fbs_conference_label,
+    normalize_conference_label,
+)
 
 
 class TestHistoricalConferences(unittest.TestCase):
+    def test_american_athletic_alias(self) -> None:
+        self.assertEqual(normalize_conference_label("American Athletic"), "American")
+        self.assertTrue(is_fbs_conference_label("American Athletic"))
+
     def test_conference_for_season_uses_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "historical_team_conferences.json"

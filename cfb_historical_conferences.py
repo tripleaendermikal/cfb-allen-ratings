@@ -15,6 +15,18 @@ HISTORICAL_JSON = REPO_ROOT / "data" / "historical_team_conferences.json"
 # Defunct FBS leagues still shown on Previous Years (not in current teams CSV).
 HISTORICAL_FBS_EXTRA = frozenset({"WAC", "Big East"})
 
+# ESPN standings / older exports sometimes use non-canonical labels.
+_CONFERENCE_ALIASES = {
+    "American Athletic": "American",
+    "American Athletic Conference": "American",
+    "American Conference": "American",
+    "FBS Independents": "FBS Indep.",
+    "Independents": "FBS Indep.",
+    "Mid-American Conference": "MAC",
+    "Mid-American": "MAC",
+    "Conference USA": "CUSA",
+}
+
 FCS_CONFERENCE_LABELS = frozenset(
     {
         "Big Sky",
@@ -48,13 +60,23 @@ def _load_historical() -> dict[str, dict[str, str]]:
     out: dict[str, dict[str, str]] = {}
     for year, mapping in seasons.items():
         if isinstance(mapping, dict):
-            out[str(year)] = {str(k): str(v) for k, v in mapping.items()}
+            out[str(year)] = {
+                str(k): normalize_conference_label(str(v))
+                for k, v in mapping.items()
+            }
     return out
+
+
+def normalize_conference_label(conf: str) -> str:
+    label = (conf or "").strip()
+    if not label:
+        return ""
+    return _CONFERENCE_ALIASES.get(label, label)
 
 
 def is_fbs_conference_label(conf: str) -> bool:
     """True for a conference label that denotes FBS membership that season."""
-    label = (conf or "").strip()
+    label = normalize_conference_label(conf)
     if not label or label == "Unknown":
         return False
     if label in FCS_CONFERENCE_LABELS:
@@ -80,7 +102,7 @@ def conference_for_season(
     conf = (default or "").strip()
     if season_year is not None:
         hist = _load_historical().get(str(season_year), {})
-        conf = hist.get(tid, conf)
+        conf = normalize_conference_label(hist.get(tid, conf))
         return conf
     return apply_team_conference_override(tid, conf)
 
