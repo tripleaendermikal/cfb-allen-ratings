@@ -373,14 +373,13 @@ def build_conference_summary_text(
 ) -> str:
     is_g6 = bool(conf_row.get("is_group_of_6"))
     total_title = float(conf_row.get("total_title_odds_pct") or 0)
-    sims_member_pct = float(conf_row.get("sims_with_member_pct") or 0)
+    avg_teams_in_field = float(conf_row.get("avg_teams_in_field") or 0)
     favorite_name = conf_row.get("conf_favorite_name")
     favorite_odds = float(conf_row.get("conf_favorite_odds_pct") or 0)
     teams = list(conf_row.get("teams") or [])
     teams_sorted = sorted(teams, key=lambda t: -float(t.get("conf_champ_odds_pct") or 0))
 
     playoff_share = float(deep.get("playoff_share_pct") or 0)
-    title_top3_share = deep.get("title_top3_share_pct")
     avg_sos = deep.get("avg_sos")
     top_title = max(teams, key=lambda t: float(t.get("title_odds_pct") or 0)) if teams else None
 
@@ -388,7 +387,8 @@ def build_conference_summary_text(
         identity = (
             f"The {conference} is a Group of 6 league in the "
             f"{model_label(season_year, mode)}, "
-            f"with a member in the playoff field in {sims_member_pct:.1f}% of {sim_count} simulations."
+            f"averaging {avg_teams_in_field:.2f} teams in the playoff field across "
+            f"{sim_count} simulations."
         )
         if total_title >= 0.05:
             identity += f" The league accounts for {total_title:.2f}% of national title equity."
@@ -447,13 +447,7 @@ def build_conference_summary_text(
         national = (
             f"{nt_short} is the league's top national title threat at {nt_odds:.2f}% championship odds"
         )
-        if title_top3_share is not None and not is_g6:
-            national += (
-                f", and the top three teams hold {title_top3_share:.1f}% "
-                f"of the conference's title equity."
-            )
-        else:
-            national += "."
+        national += "."
         if is_g6 and nt_elig >= 5:
             national += (
                 f" That {nt_elig:.1f}% playoff rate is what makes the {conference} "
@@ -1199,6 +1193,23 @@ def build_game_slugs(games: dict[str, dict]) -> dict[str, dict]:
     return {"slug_to_id": slug_to_id, "id_to_slug": id_to_slug}
 
 
+def _avg_playoff_metric(traditional: object, resume: object) -> float:
+    values: list[float] = []
+    if traditional is not None:
+        values.append(float(traditional))
+    if resume is not None:
+        values.append(float(resume))
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), 2)
+
+
+def _combined_playoff_appearances(lb_row: dict) -> int:
+    return int(lb_row.get("playoff_appearances") or 0) + int(
+        lb_row.get("resume_playoff_appearances") or 0
+    )
+
+
 def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[list[str]], n_sims: int) -> list[dict]:
     lb_by_id = {r["team_id"]: r for r in leaderboard if r.get("team_id")}
     by_conf: dict[str, list[dict]] = {}
@@ -1210,9 +1221,22 @@ def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[l
         if not is_fbs_conference(conf):
             continue
         team_ids = {m["team_id"] for m in members}
-        conf_fields_with_member = sum(1 for field in fields if any(tid in team_ids for tid in field))
-        playoff_apps = sum(lb_by_id.get(m["team_id"], {}).get("playoff_appearances", 0) for m in members)
-        title_sum = sum(lb_by_id.get(m["team_id"], {}).get("title_odds_pct", 0) for m in members)
+        members_in_field_total = sum(
+            sum(1 for tid in field if tid in team_ids) for field in fields
+        )
+        avg_teams_in_field = (
+            round(members_in_field_total / n_sims, 2) if n_sims else 0.0
+        )
+        playoff_apps = sum(
+            _combined_playoff_appearances(lb_by_id.get(m["team_id"], {})) for m in members
+        )
+        title_sum = sum(
+            _avg_playoff_metric(
+                lb_by_id.get(m["team_id"], {}).get("title_odds_pct"),
+                lb_by_id.get(m["team_id"], {}).get("resume_title_odds_pct"),
+            )
+            for m in members
+        )
         conf_champ_sum = sum(
             lb_by_id.get(m["team_id"], {}).get("conf_champ_odds_pct", 0) for m in members
         )
@@ -1245,23 +1269,32 @@ def build_conferences(teams: list[dict], leaderboard: list[dict], fields: list[l
                 "conf_favorite_name": conf_favorite_name,
                 "conf_favorite_odds_pct": conf_favorite_odds_pct,
                 "total_playoff_appearances": playoff_apps,
-                "sims_with_member": conf_fields_with_member,
-                "sims_with_member_pct": round(conf_fields_with_member / n_sims * 100, 2) if n_sims else 0,
+                "avg_teams_in_field": avg_teams_in_field,
                 "teams": sorted(
                     [
                         {
                             "team_id": m["team_id"],
                             "team_name": m["team_name"],
                             "avg_wins": m["avg_wins"],
-                            "title_odds_pct": lb_by_id.get(m["team_id"], {}).get("title_odds_pct", 0),
+                            "title_odds_pct": _avg_playoff_metric(
+                                lb_by_id.get(m["team_id"], {}).get("title_odds_pct"),
+                                lb_by_id.get(m["team_id"], {}).get("resume_title_odds_pct"),
+                            ),
                             "conf_champ_odds_pct": lb_by_id.get(m["team_id"], {}).get(
                                 "conf_champ_odds_pct", 0
                             ),
                             "conf_champ_appearances": lb_by_id.get(m["team_id"], {}).get(
                                 "conf_champ_appearances", 0
                             ),
-                            "eligibility_pct": lb_by_id.get(m["team_id"], {}).get("eligibility_pct", 0),
-                            "playoff_appearances": lb_by_id.get(m["team_id"], {}).get("playoff_appearances", 0),
+                            "eligibility_pct": _avg_playoff_metric(
+                                lb_by_id.get(m["team_id"], {}).get("eligibility_pct"),
+                                lb_by_id.get(m["team_id"], {}).get(
+                                    "resume_playoff_eligibility_pct"
+                                ),
+                            ),
+                            "playoff_appearances": _combined_playoff_appearances(
+                                lb_by_id.get(m["team_id"], {})
+                            ),
                             "sos": lb_by_id.get(m["team_id"], {}).get("sos"),
                         }
                         for m in members
@@ -1318,9 +1351,6 @@ def build_conference_deep(
                 )
             return items
 
-        title_pcts = [t.get("title_odds_pct", 0) for t in conf_row["teams"]]
-        title_total = sum(title_pcts)
-        top3 = sum(sorted(title_pcts, reverse=True)[:3])
         sos_vals = [t["sos"] for t in conf_row["teams"] if t.get("sos") is not None]
         field_apps = sum(t.get("playoff_appearances", 0) for t in conf_row["teams"])
         member_slots = len(team_ids) * n_sims if n_sims else 1
@@ -1332,7 +1362,6 @@ def build_conference_deep(
                 str(k): playoff_per_sim[k] for k in sorted(playoff_per_sim.keys())
             },
             "playoff_share_pct": round(field_apps / member_slots * 100, 2),
-            "title_top3_share_pct": round(top3 / title_total * 100, 1) if title_total else 0,
             "avg_sos": round(sum(sos_vals) / len(sos_vals), 2) if sos_vals else None,
         }
     return deep

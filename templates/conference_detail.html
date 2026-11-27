@@ -13,7 +13,7 @@
     <h1><span class="badge conf-hero-badge">{{ conf.conference }}</span></h1>
     <p class="subtitle conf-hero-sub">
       {% if conf.is_group_of_6 %}Group of 6 · {% endif %}
-      {{ conf.team_count }} teams · {{ conf.sims_with_member_pct }}% of sims include a member
+      {{ conf.team_count }} teams · {{ "%.2f"|format(conf.avg_teams_in_field or 0) }} avg teams in field
     </p>
   </header>
 
@@ -35,13 +35,6 @@
       <div class="stat-value">{{ deep.playoff_share_pct or 0 }}%</div>
       <div class="muted" style="font-size:0.8rem;">Member slots in playoff field</div>
     </div>
-    {% if deep.get('title_top3_share_pct') is not none %}
-    <div class="card conf-accent-card">
-      <div class="stat-label">Title Odds Concentration</div>
-      <div class="stat-value">{{ deep.title_top3_share_pct }}%</div>
-      <div class="muted" style="font-size:0.8rem;">Top 3 teams' share of this conference's title odds</div>
-    </div>
-    {% endif %}
     {% if conf.avg_overall is not none %}
     <div class="card conf-accent-card">
       <div class="stat-label">Avg Overall</div>
