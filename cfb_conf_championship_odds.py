@@ -3,9 +3,13 @@
 Compute conference championship odds from simulated in-conference results.
 
 For each simulation and conference:
-  1. Rank teams by conference win percentage (conf wins / conf games)
-  2. Select top 2 with H2H-then-FPI tiebreakers
-  3. Neutral-site title game via per-sim FPI logistic model
+  1. Build in-conference standings (plus division/overall/capped-margin stats)
+  2. Select CCG participants via conference-specific tiebreakers in
+     ``cfb_conf_tiebreakers`` (Sun Belt: East/West division champions;
+     Pac-12: no title game; resume rank for CFP-style steps, overall
+     margin for SportSource/composite steps)
+  3. Neutral-site title game via per-sim FPI logistic model (or scheduled
+     week-14 ESPN CCG rows when present)
 
 Examples:
   python cfb_conf_championship_odds.py --from-data

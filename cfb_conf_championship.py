@@ -11,6 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cfb_conf_standings import (
+    build_sim_col_standings,
+    infer_season_year,
+    load_fbs_team_ids,
+    load_sun_belt_divisions,
+)
+from cfb_conf_tiebreakers import select_ccg_participants
 from cfb_playoff_odds import matchup_win_prob
 from pac12_week13 import apply_flex_conf_stats_for_cols, is_flex_row
 from cfb_conference_corrections import apply_conference_lookup_overrides
@@ -372,6 +379,16 @@ def compute_conf_results_by_sim(
         game_rows = list(reader)
 
     sim_fpi_by_col = load_sim_fpi_by_team_id(games_fpi_path, sim_cols)
+    sim_fpi_by_team_id: dict[str, dict[str, float]] = {}
+    for col in sim_cols:
+        for tid, val in sim_fpi_by_col[col].items():
+            sim_fpi_by_team_id.setdefault(tid, {})[col] = val
+
+    fbs_team_ids = load_fbs_team_ids(conf_path)
+    season_year = infer_season_year(game_rows)
+    sun_belt_div = load_sun_belt_divisions(season_year=season_year)
+    partial_ccg_ids = partial_scheduled_ccg_game_ids(scheduled_ccg)
+
     conf_games, conf_wins, h2h_wins, h2h_games = _build_conf_game_stats(
         game_rows,
         conf_by_id,
@@ -405,6 +422,20 @@ def compute_conf_results_by_sim(
     for col in sim_cols:
         fpi = sim_fpi_by_col[col]
         rng = random.Random(sim_col_seed(col))
+        sim_standings = build_sim_col_standings(
+            col,
+            game_rows,
+            conf_by_id,
+            conf_teams,
+            dict(conf_games[col]),
+            dict(conf_wins[col]),
+            dict(h2h_wins[col]),
+            dict(h2h_games[col]),
+            partial_ccg_game_ids=partial_ccg_ids,
+            sim_fpi_by_team_id=sim_fpi_by_team_id,
+            fbs_team_ids=fbs_team_ids,
+            sun_belt_div=sun_belt_div,
+        )
         for conf in sorted_confs:
             sched = scheduled_ccg.get(conf)
             if sched and sched.resolved:
@@ -432,26 +463,20 @@ def compute_conf_results_by_sim(
             if len(eligible) < 2:
                 continue
 
-            win_pct = {
-                tid: conf_wins[col][tid] / conf_games[col][tid] for tid in eligible
-            }
-            ranked = rank_conference_teams(
-                eligible,
-                win_pct,
-                h2h_wins[col],
-                h2h_games[col],
-                fpi,
+            partial_known = (
+                sched.partial_known_team_id
+                if sched and not sched.resolved
+                else None
             )
-
-            if sched and not sched.resolved and sched.partial_known_team_id:
-                known = sched.partial_known_team_id
-                pool = [tid for tid in ranked if tid != known]
-                if not pool:
-                    continue
-                top_two = [known, pool[0]]
-            else:
-                top_two = ranked[:2]
-            if len(top_two) < 2:
+            top_two = select_ccg_participants(
+                conf,
+                eligible,
+                sim_standings,
+                sun_belt_div,
+                rng,
+                partial_known_team_id=partial_known,
+            )
+            if not top_two or len(top_two) < 2:
                 continue
 
             a, b = top_two[0], top_two[1]
