@@ -446,6 +446,8 @@ class DataStore:
             row["resume_title_odds_pct"] = lb_row.get("resume_title_odds_pct")
             row["display_playoff_pct"] = _leaderboard_playoff_pct(row, ranking_mode)
             row["display_title_pct"] = _leaderboard_title_pct(row, ranking_mode)
+            if row.get("sos") is None:
+                row["sos"] = self.teams_by_id.get(tid, {}).get("sos")
             rows.append(row)
 
         if ranking_mode == "algorithm":
@@ -644,11 +646,16 @@ class DataStore:
         payload = self.prior_season_payload(season_year)
         by_week = payload.get("by_week") or {}
         raw_rows = list(by_week.get(str(week)) or [])
+        sos_by_team = payload.get("sos_by_team") or {}
         rows: list[dict] = []
         for row in raw_rows:
             if not is_fbs_conference(row.get("conference", "")):
                 continue
-            rows.append(dict(row))
+            enriched = dict(row)
+            tid = enriched.get("team_id")
+            if enriched.get("sos") is None and tid and tid in sos_by_team:
+                enriched["sos"] = sos_by_team[tid]
+            rows.append(enriched)
 
         if ranking_mode == "resume":
             rows.sort(

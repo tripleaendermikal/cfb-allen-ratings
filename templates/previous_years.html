@@ -68,6 +68,7 @@
       <th data-sort="num">Overall</th>
       {% endif %}
       <th data-sort="text">Record</th>
+      <th data-sort="num">SOS</th>
     </tr>
   </thead>
   <tbody>
@@ -92,6 +93,9 @@
       </td>
       {% endif %}
       <td class="num" data-value="{{ row.record or '' }}">{{ row.record or '—' }}</td>
+      <td class="num" data-value="{{ row.sos if row.sos is not none else '' }}">
+        {% if row.sos is not none %}{{ "%+.1f"|format(row.sos) }}{% else %}—{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

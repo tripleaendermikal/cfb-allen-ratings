@@ -27,6 +27,7 @@ from cfb_rating.in_season import (
 from cfb_rating.rating_algorithm import GameRecord
 from cfb_rating.resume import team_record_from_games
 from cfb_rating.season_data import load_espn_games
+from cfb_team_sos import compute_team_sos_from_games
 
 FCS_CONFERENCES = {"Big Sky", "CAA", "Ivy", "MEAC", "Missouri Valley", "NEC", "OVC", "Patriot", "Pioneer", "Southern", "Southland", "SWAC", "UAC"}
 
@@ -93,6 +94,8 @@ def infer_max_week(games: Sequence[GameRecord]) -> int:
 def row_to_json(
     row: InSeasonRankingRow,
     record: Mapping[str, int],
+    *,
+    sos: float | None = None,
 ) -> dict:
     wins = record.get("wins", 0)
     losses = record.get("losses", 0)
@@ -109,6 +112,7 @@ def row_to_json(
         "wins": int(wins),
         "losses": int(losses),
         "record": f"{wins}-{losses}",
+        **({"sos": float(sos)} if sos is not None else {}),
     }
 
 
@@ -138,6 +142,9 @@ def build_season_export(
     for row in rows:
         by_week_rows[row.week].append(row)
 
+    sos_source = list(rec_source) if record_games is not None else list(games)
+    sos_by_team = compute_team_sos_from_games(sos_source, preseason_margins)
+
     by_week_json: dict[str, list[dict]] = {}
     weeks = sorted(by_week_rows.keys())
     record_cap = max(
@@ -146,7 +153,14 @@ def build_season_export(
     )
     for week in weeks:
         recs = records_for_week(rec_source, team_ids, week, record_cap_week=record_cap)
-        entries = [row_to_json(r, recs.get(r.team_id, {})) for r in by_week_rows[week]]
+        entries = [
+            row_to_json(
+                r,
+                recs.get(r.team_id, {}),
+                sos=sos_by_team.get(r.team_id),
+            )
+            for r in by_week_rows[week]
+        ]
         by_week_json[str(week)] = entries
 
     final_week = weeks[-1] if weeks else 0
@@ -168,6 +182,7 @@ def build_season_export(
         "team_count": len(team_ids),
         "max_week": max_week,
         "by_week": by_week_json,
+        "sos_by_team": sos_by_team,
     }
     if postseason_week is not None and postseason_week > 1:
         payload["postseason_week"] = postseason_week
