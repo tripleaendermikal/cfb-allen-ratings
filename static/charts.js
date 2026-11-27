@@ -154,7 +154,15 @@
           },
           y: {
             beginAtZero: true,
+            suggestedMax: opts.ySuggestedMax,
             title: opts.yTitle ? scaleTitle(opts.yTitle) : scaleTitle('Simulations'),
+            ticks: opts.yPercent
+              ? {
+                  callback: function (v) {
+                    return v + '%';
+                  },
+                }
+              : undefined,
           },
         },
       },

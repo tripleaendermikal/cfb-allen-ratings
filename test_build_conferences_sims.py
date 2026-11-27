@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 
-from export_sim_data import build_conferences
+from export_sim_data import build_conference_deep, build_conferences
 
 
 class BuildConferencesSimsTests(unittest.TestCase):
@@ -48,6 +48,38 @@ class BuildConferencesSimsTests(unittest.TestCase):
         self.assertEqual(sec["total_title_odds_pct"], 18.0)
         self.assertEqual(sec["total_playoff_appearances"], 150)
         self.assertNotIn("sims_with_member", sec)
+
+    def test_ccg_chart_pct_uses_ccg_sim_count_not_full_pool(self) -> None:
+        conferences = [
+            {
+                "conference": "SEC",
+                "teams": [
+                    {
+                        "team_id": "1",
+                        "team_name": "A",
+                        "title_odds_pct": 10.0,
+                        "playoff_appearances": 0,
+                        "sos": 1.0,
+                    },
+                ],
+            }
+        ]
+        champions = [{"SEC": "1"}] * 500
+        finalists = [{"SEC": ["1", "2"]}] * 500
+        fields = [["1"]] * 2000
+        deep = build_conference_deep(
+            conferences,
+            champions,
+            finalists,
+            fields,
+            {"1": "A", "2": "B"},
+            n_sims=2000,
+            ccg_sim_count=500,
+        )
+        sec = deep["SEC"]
+        self.assertEqual(sec["champion_chart"][0]["count"], 500)
+        self.assertEqual(sec["champion_chart"][0]["pct"], 100.0)
+        self.assertEqual(sum(int(v) for v in sec["playoff_teams_per_sim"].values()), 2000)
 
 
 if __name__ == "__main__":

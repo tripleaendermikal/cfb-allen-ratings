@@ -185,6 +185,23 @@ def prepare_conference(conf: dict, store: "DataStore") -> dict:
     """Conference row with per-team odds aligned to overall leaderboard."""
     prepared = dict(conf)
     teams = enrich_conference_teams(prepared, store)
+    deep = store.conference_deep.get(prepared["conference"], {})
+    champ_pct = {
+        row["team_id"]: float(row["pct"])
+        for row in (deep.get("champion_chart") or [])
+        if row.get("team_id") is not None
+    }
+    finalist_counts = {
+        row["team_id"]: int(row["count"])
+        for row in (deep.get("finalist_chart") or [])
+        if row.get("team_id") is not None
+    }
+    for t in teams:
+        tid = t.get("team_id")
+        if tid in champ_pct:
+            t["conf_champ_odds_pct"] = champ_pct[tid]
+        if tid in finalist_counts:
+            t["conf_champ_appearances"] = finalist_counts[tid]
     prepared["teams"] = teams
     prepared["total_title_odds_pct"] = round(
         sum(float(t.get("title_odds_pct") or 0) for t in teams),
@@ -1609,7 +1626,14 @@ def create_app() -> Flask:
             deep = store.conference_deep.get(conf_name, {})
             playoff_hist = deep.get("playoff_teams_per_sim", {})
             playoff_hist_labels = list(playoff_hist.keys())
-            playoff_hist_data = [playoff_hist[k] for k in playoff_hist_labels]
+            hist_total = sum(int(playoff_hist[k]) for k in playoff_hist_labels)
+            n_hist_sims = store.season_sim_count or hist_total or 1
+            if hist_total and hist_total != n_hist_sims:
+                n_hist_sims = hist_total
+            playoff_hist_data = [
+                round(int(playoff_hist[k]) / n_hist_sims * 100, 2)
+                for k in playoff_hist_labels
+            ]
 
             sim_raw = request.args.get("sim", "").strip()
             sim_index = None

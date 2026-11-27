@@ -1313,8 +1313,13 @@ def build_conference_deep(
     fields: list[list[str]],
     id_to_name: dict[str, str],
     n_sims: int,
+    *,
+    ccg_sim_count: int | None = None,
 ) -> dict[str, dict]:
     """Per-conference rollups for detail pages and charts."""
+    ccg_denom = ccg_sim_count if ccg_sim_count is not None else len(champions_by_sim)
+    if ccg_denom <= 0:
+        ccg_denom = n_sims
     deep: dict[str, dict] = {}
     for conf_row in conferences:
         conf = conf_row["conference"]
@@ -1338,7 +1343,7 @@ def build_conference_deep(
             n_in_conf = sum(1 for tid in field if tid in team_ids)
             playoff_per_sim[n_in_conf] += 1
 
-        def team_chart(counter: Counter[str]) -> list[dict]:
+        def team_chart(counter: Counter[str], denom: int) -> list[dict]:
             items = []
             for tid, count in counter.most_common():
                 items.append(
@@ -1346,7 +1351,7 @@ def build_conference_deep(
                         "team_id": tid,
                         "team_name": id_to_name.get(tid, tid),
                         "count": count,
-                        "pct": round(count / n_sims * 100, 2) if n_sims else 0,
+                        "pct": round(count / denom * 100, 2) if denom else 0,
                     }
                 )
             return items
@@ -1356,8 +1361,8 @@ def build_conference_deep(
         member_slots = len(team_ids) * n_sims if n_sims else 1
 
         deep[conf] = {
-            "champion_chart": team_chart(champ_counts),
-            "finalist_chart": team_chart(finalist_counts),
+            "champion_chart": team_chart(champ_counts, ccg_denom),
+            "finalist_chart": team_chart(finalist_counts, ccg_denom),
             "playoff_teams_per_sim": {
                 str(k): playoff_per_sim[k] for k in sorted(playoff_per_sim.keys())
             },

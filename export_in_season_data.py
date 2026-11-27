@@ -476,6 +476,7 @@ def main() -> int:
         all_fields,
         id_to_name,
         n_sims,
+        ccg_sim_count=trad_sim_count,
     )
 
     season_year = 2026
