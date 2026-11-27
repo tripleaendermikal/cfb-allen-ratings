@@ -188,3 +188,24 @@ Display **Record** on Previous Years counts **all games for that FBS team** (inc
 Each season’s team list is **only schools in FBS that year** (`historical_team_conferences.json`), not the current 138-team map.
 
 Conference badges use `data/historical_team_conferences.json` (ESPN standings by season, plus supplemental groups such as WAC for 2007–2012 and team-page fallback), not current `espn_cfb_teams_conferences.csv`. Regenerate with `python build_historical_team_conferences.py` and re-export prior seasons when memberships change.
+
+## Conference championship tiebreakers
+
+`cfb_conf_championship.compute_conf_results_by_sim` picks synthetic CCG
+matchups with league rules in `cfb_conf_tiebreakers.py` (see also
+`cfb_conf_standings.py` for per-sim context).
+
+| Proxy | Use |
+|-------|-----|
+| **Resume margin** (per sim, from simulated season games) | CFP committee-style steps (American, Mountain West, CUSA, Sun Belt) |
+| **Overall margin** (per-sim FPI) | SportSource / composite computer steps |
+| **Capped margin** | SEC tiebreakers (±21 proxy per conf game, capped at 28) |
+
+- **Power leagues** (SEC, Big Ten, ACC, Big 12): common-opponent chains, combined opponent conf win %, plus SEC capped margin and Big 12 total wins where specified.
+- **Sun Belt**: East/West division champions from `cfb_data/sun_belt_divisions.json` (season-keyed); division tiebreakers then resume/overall.
+- **Pac-12**: no conference championship game in the model (four-team league).
+- **Draw/coin flip**: deterministic per sim column and conference via seeded RNG.
+
+ESPN week-14 scheduled championship games still set finalists from the
+schedule when both teams are known; partial TBD rows pin the known team
+and run tiebreakers for the opponent.
