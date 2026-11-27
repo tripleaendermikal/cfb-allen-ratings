@@ -122,3 +122,53 @@ python3 scripts/preseason_regression.py
 ```
 
 Last run metrics embedded in that script match the tables above (exported_at on `previous_years.json` at time of authoring: **2026-11-27**).
+
+---
+
+## 2027 projection (Model B applied forward)
+
+Use the **Model B** coefficients and group intercepts above. For a target season **T**, use final-week `overall_margin` from seasons **T−4 … T−1**, each multiplied by the matching slot weight \((\beta_{2021}, \beta_{2022}, \beta_{2023}, \beta_{2024})\) from the fit, then add \(\alpha_g\).
+
+For **2027** that is ratings from **2023, 2024, 2025, and 2026** (within the **2022–2026** history window, the four seasons immediately before 2027). **2026** is taken from **in-season week 13** `overall_margin` in `data/rankings.json` (not a completed season).
+
+\[
+\hat{r}_{2027}
+  = 0.0278\,r_{2023} + 0.1325\,r_{2024} + 0.0386\,r_{2025} + 0.4435\,r_{2026} + \alpha_g
+\]
+
+**Teams projected:** 133 with all four input seasons present.
+
+**Outputs**
+
+- Full list: `data/preseason_2027_predicted_rankings.csv`
+- Regenerate: `python3 scripts/preseason_regression.py --predict-2027-only`
+
+### Top 25 (projected overall margin, 2027)
+
+| Rank | Team | Conf. | Proj. margin |
+|-----:|------|-------|-------------:|
+| 1 | Georgia Bulldogs | SEC | 20.74 |
+| 2 | Notre Dame Fighting Irish | FBS Indep. | 18.89 |
+| 3 | Texas Longhorns | SEC | 17.86 |
+| 4 | Alabama Crimson Tide | SEC | 17.44 |
+| 5 | Ohio State Buckeyes | Big Ten | 16.84 |
+| 6 | Tennessee Volunteers | SEC | 16.45 |
+| 7 | Oregon Ducks | Big Ten | 15.91 |
+| 8 | LSU Tigers | SEC | 15.46 |
+| 9 | Miami Hurricanes | ACC | 14.84 |
+| 10 | Ole Miss Rebels | SEC | 14.65 |
+| 11 | Indiana Hoosiers | Big Ten | 13.73 |
+| 12 | Utah Utes | Big 12 | 13.23 |
+| 13 | BYU Cougars | Big 12 | 12.22 |
+| 14 | Iowa Hawkeyes | Big Ten | 11.72 |
+| 15 | Louisville Cardinals | ACC | 11.52 |
+| 16 | Missouri Tigers | SEC | 11.45 |
+| 17 | UCLA Bruins | Big Ten | 11.23 |
+| 18 | Oklahoma Sooners | SEC | 10.99 |
+| 19 | Texas Tech Red Raiders | Big 12 | 10.94 |
+| 20 | South Carolina Gamecocks | SEC | 10.85 |
+| 21 | Florida Gators | SEC | 10.46 |
+| 22 | USC Trojans | Big Ten | 10.13 |
+| 23 | Nebraska Cornhuskers | Big Ten | 9.99 |
+| 24 | Penn State Nittany Lions | Big Ten | 9.72 |
+| 25 | Wake Forest Demon Deacons | ACC | 8.70 |

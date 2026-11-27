@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import argparse
+import csv
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -12,6 +14,12 @@ from scipy.optimize import lsq_linear, nnls
 
 ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_YEARS = ROOT / "data" / "previous_years.json"
+RANKINGS_JSON = ROOT / "data" / "rankings.json"
+PREDICTED_2027_CSV = ROOT / "data" / "preseason_2027_predicted_rankings.csv"
+
+# Model B coefficients (fixed after fit on 2025 holdout; see preseason_regression.md)
+MODEL_B_BETA_BY_SLOT = (0.027752, 0.132481, 0.038620, 0.443463)  # oldest..newest lag
+MODEL_B_ALPHAS = (2.6515, 2.1851, -3.2675, -8.3003)
 
 GROUP_NAMES = [
     "SEC / Notre Dame / Big Ten",
@@ -44,6 +52,78 @@ def final_season_table(season: int) -> tuple[dict[str, float], dict[str, tuple[s
         margins[team_id] = float(row["overall_margin"])
         meta[team_id] = (row["team_name"], row.get("conference", "") or "")
     return margins, meta
+
+
+def in_season_margins(season_year: int) -> tuple[dict[str, float], dict[str, tuple[str, str]], int]:
+    """Overall margin from live rankings export (current week, not final)."""
+    payload = json.loads(RANKINGS_JSON.read_text())
+    if payload.get("current_week") is None:
+        raise SystemExit("rankings.json missing current_week")
+    week = int(payload["current_week"])
+    rows = payload["by_week"].get(str(week)) or payload["by_week"][week]
+    margins: dict[str, float] = {}
+    meta: dict[str, tuple[str, str]] = {}
+    for row in rows:
+        overall = row.get("overall_margin")
+        if overall is None:
+            continue
+        team_id = row["team_id"]
+        margins[team_id] = float(overall)
+        meta[team_id] = (row["team_name"], row.get("conference", "") or "")
+    return margins, meta, week
+
+
+def predict_2027_rankings(write_csv: Path | None = PREDICTED_2027_CSV) -> list[dict]:
+    """Model B projection for 2027 using final-week margins 2023–2025 and in-season 2026."""
+    lag_years = (2023, 2024, 2025, 2026)
+    data: dict[int, dict[str, float]] = {}
+    meta: dict[int, dict[str, tuple[str, str]]] = {}
+    week_2026: int | None = None
+    for year in (2023, 2024, 2025):
+        data[year], meta[year] = final_season_table(year)
+    data[2026], meta[2026], week_2026 = in_season_margins(2026)
+
+    team_ids = sorted(set.intersection(*[set(data[y]) for y in lag_years]))
+    rows_out: list[dict] = []
+    def predicted_margin(tid: str) -> float:
+        conf = meta[2026].get(tid, meta[2025].get(tid, ("", "")))[1]
+        linear = sum(MODEL_B_BETA_BY_SLOT[i] * data[lag_years[i]][tid] for i in range(4))
+        return linear + MODEL_B_ALPHAS[group_for_team(tid, conf)]
+
+    for rank, team_id in enumerate(
+        sorted(team_ids, key=lambda tid: -predicted_margin(tid)),
+        start=1,
+    ):
+        conf = meta[2026].get(team_id, meta[2025].get(team_id, ("", "")))[1]
+        g = group_for_team(team_id, conf)
+        predicted = predicted_margin(team_id)
+        name = meta[2026].get(team_id, meta[2025][team_id])[0]
+        rows_out.append(
+            {
+                "rank": rank,
+                "team_id": team_id,
+                "team_name": name,
+                "conference": conf,
+                "group": g + 1,
+                "predicted_overall_margin_2027": round(predicted, 4),
+                "r_2023": round(data[2023][team_id], 4),
+                "r_2024": round(data[2024][team_id], 4),
+                "r_2025": round(data[2025][team_id], 4),
+                "r_2026": round(data[2026][team_id], 4),
+            }
+        )
+
+    if write_csv:
+        write_csv.parent.mkdir(parents=True, exist_ok=True)
+        with write_csv.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows_out[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows_out)
+        print(
+            f"Wrote {len(rows_out)} projected 2027 rows to {write_csv} "
+            f"(2026 inputs: week {week_2026} in-season overall_margin)"
+        )
+    return rows_out
 
 
 def main() -> None:
@@ -111,4 +191,26 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--predict-2027",
+        action="store_true",
+        help="Write Model B 2027 rankings to data/preseason_2027_predicted_rankings.csv",
+    )
+    parser.add_argument(
+        "--predict-2027-only",
+        action="store_true",
+        help="Only run 2027 projection (skip refitting 2025 holdout models)",
+    )
+    args = parser.parse_args()
+    if args.predict_2027_only:
+        rows = predict_2027_rankings()
+        for row in rows[:25]:
+            print(
+                f"{row['rank']:3d}  {row['predicted_overall_margin_2027']:7.2f}  "
+                f"{row['team_name']} ({row['conference']})"
+            )
+    else:
+        main()
+        if args.predict_2027:
+            predict_2027_rankings()
