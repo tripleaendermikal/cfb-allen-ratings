@@ -14,6 +14,7 @@ from cfb_matchup import (
     pick_game_for_site,
     project_from_ratings,
 )
+from cfb_power_classification import filter_rows_by_power, parse_power_filter
 from cfb_rating.in_season import compute_overall_margin
 
 APP_DIR = Path(__file__).resolve().parent
@@ -1129,6 +1130,7 @@ def create_app() -> Flask:
     @app.route("/")
     def leaderboard():
         conf_filter = request.args.get("conference", "").strip()
+        power_filter = parse_power_filter(request.args.get("power"))
         week_raw = request.args.get("week", "").strip()
         ranking_mode = request.args.get("mode", "overall").strip().lower()
         if ranking_mode not in ("overall", "algorithm", "resume", "forecast_resume"):
@@ -1147,11 +1149,15 @@ def create_app() -> Flask:
         rows = store.leaderboard_for_week(week, ranking_mode=ranking_mode)
         if conf_filter:
             rows = [r for r in rows if r.get("conference") == conf_filter]
+        season_year = int(store.meta.get("season_year") or 2026)
+        rows = filter_rows_by_power(rows, season_year, power_filter)
         return render_template(
             "leaderboard.html",
             rows=rows,
             conferences=store.conference_names,
             conf_filter=conf_filter,
+            power_filter=power_filter,
+            season_year=season_year,
             week=week,
             weeks=store.ranking_weeks,
             ranking_mode=ranking_mode,
@@ -1187,9 +1193,11 @@ def create_app() -> Flask:
             ranking_mode = "overall"
 
         conf_filter = request.args.get("conference", "").strip()
+        power_filter = parse_power_filter(request.args.get("power"))
         rows = store.previous_season_rows(season, week, ranking_mode=ranking_mode)
         if conf_filter:
             rows = [r for r in rows if r.get("conference") == conf_filter]
+        rows = filter_rows_by_power(rows, season, power_filter)
 
         conferences = store.prior_conference_names(season, week)
         week_labels = store.prior_season_week_labels(season)
@@ -1206,6 +1214,7 @@ def create_app() -> Flask:
             ranking_mode=ranking_mode,
             conferences=conferences,
             conf_filter=conf_filter,
+            power_filter=power_filter,
             active="previous_years",
         )
 

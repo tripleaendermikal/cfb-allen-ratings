@@ -39,10 +39,18 @@
     </select>
   </label>
   <label>
+    Tier
+    <select name="power" onchange="this.form.submit()" title="Power membership rules depend on season {{ season }}">
+      <option value="" {% if not power_filter %}selected{% endif %}>All FBS</option>
+      <option value="power" {% if power_filter == 'power' %}selected{% endif %}>Power</option>
+      <option value="non_power" {% if power_filter == 'non_power' %}selected{% endif %}>Non-Power</option>
+    </select>
+  </label>
+  <label>
     Search
     <input type="search" id="previous-years-search" placeholder="Filter teams…">
   </label>
-  {% if conf_filter or ranking_mode != 'overall' %}
+  {% if conf_filter or power_filter or ranking_mode != 'overall' %}
   <a href="{{ url_for('previous_years', season=season, week=week) }}" class="btn" style="text-decoration:none;display:inline-block;">Reset filters</a>
   {% endif %}
 </form>
