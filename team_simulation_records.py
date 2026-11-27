@@ -117,13 +117,13 @@ def main() -> int:
         fpi_path = infer_games_fpi_path(inp)
         from cfb_conf_championship import (
             is_partial_scheduled_ccg_row,
-            load_conference_lookup,
+            load_conference_lookup as load_ccg_conference_lookup,
             load_scheduled_ccg_by_conference,
         )
 
         scheduled_ccg: dict = {}
         if conf_path.is_file() and fpi_path.is_file():
-            conf_by_id, _, _ = load_conference_lookup(conf_path)
+            conf_by_id, _, _ = load_ccg_conference_lookup(conf_path)
             scheduled_ccg = load_scheduled_ccg_by_conference(fpi_path, conf_by_id)
 
         for row in reader:
