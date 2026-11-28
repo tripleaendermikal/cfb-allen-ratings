@@ -11,7 +11,7 @@
   <h2>In-season rankings</h2>
   <p>
     <strong>Overall</strong> is the primary power rating and the <strong>center</strong> of in-season
-    per-simulation FPI draws. With no FBS games played it equals the preseason combined rating.
+    per-simulation strength draws. With no FBS games played it equals the preseason combined rating.
     As teams play more FBS games, Overall gradually shifts toward the algorithm margin (No Preseason)
     on the schedule shown in the rankings table.
     Rank movement (▲/▼) compares each team’s Overall rank to the prior week.
@@ -41,7 +41,7 @@
   <p>
     Each run models <strong>{{ meta.sim_count }} possible finishes</strong> to the {{ meta.season_year }} season from the current week forward.
     Completed games are <strong>pinned</strong> to their actual results in every simulation. Remaining games are simulated
-    using per-simulation FPI draws centered on <strong>Overall</strong> with uncertainty that shrinks
+    using per-simulation strength draws centered on <strong>Overall</strong> with uncertainty that shrinks
     as teams play more FBS games: σ<sub>eff</sub> = 7.3 when no FBS games have been played;
     otherwise 7.3 / √(FBS games played).
     Each simulation’s draw (not the Overall column itself) is used for remaining game margins,
@@ -53,7 +53,7 @@
   <h2>Key metrics</h2>
   <dl class="metric-list">
     <dt>Overall margin</dt>
-    <dd>Primary rating blended from preseason and in-season results by games played. Centers each season’s simulated FPI draw; bracket odds use the draw, not this point estimate.</dd>
+    <dd>Primary rating blended from preseason and in-season results by games played. Centers each season’s simulated strength draw; bracket odds use the draw, not this point estimate.</dd>
     <dt>Resume margin</dt>
     <dd>Overall adjusted to align sim-style expected win% on completed FBS games with the Clopper–Pearson 50% midpoint (see In-season rankings above).</dd>
     <dt>Forecast Resume margin</dt>
@@ -75,7 +75,7 @@
   <h2>Playoff selection &amp; bracket</h2>
   <p><strong>Traditional sims (1–{{ meta.traditional_sim_count or meta.sim_count }}):</strong> four power autobids, one Group of 5 autobid (playoff points), seven at-large spots by wins/SOS/H2H rules; seeds follow that ranking (G6 is seed 12). At most five teams from the same conference may be in the field; additional candidates are skipped in rank order.</p>
   <p><strong>Resume playoff sims ({% if meta.resume_playoff_sim_count %}{{ meta.traditional_sim_count + 1 }}–{{ meta.sim_count }}{% else %}when enabled{% endif %}):</strong> same game outcomes as the paired traditional sim, but selection uses end-of-season resume margins — P4 champs, highest-resume G6, Notre Dame if top 12 by resume, then highest resume for remaining slots; four-loss teams are ineligible unless they are a conference champion in that sim; seeds by resume (G6 still #12). Same five-teams-per-conference cap as traditional sims.</p>
-  <p>Within each simulation, bracket matchup win probabilities use that simulation’s FPI draw, not the Overall column on the rankings table.</p>
+  <p>Within each simulation, bracket matchup win probabilities use that simulation’s team strength draws, not the Overall column on the rankings table.</p>
   <p><a href="{{ url_for('bracket') }}">Explore brackets →</a> · <a href="{{ preseason_viewer_url }}" target="_blank" rel="noopener">Season preview (preseason)</a></p>
 </div>
 {% endblock %}
